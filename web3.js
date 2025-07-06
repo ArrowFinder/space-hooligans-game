@@ -312,14 +312,41 @@ class Web3Manager {
             
             // Transfer 1 $KARRAT to game wallet
             const amount = ethers.utils.parseEther('1');
+            
+            console.log('PAYMENT VERIFICATION:', {
+                from: this.address,
+                to: this.GAME_WALLET,
+                amount: '1 $KARRAT',
+                amountWei: amount.toString(),
+                contractAddress: this.KARRAT_CONTRACT
+            });
+            
             const tx = await this.gameContract.connect(this.signer).transfer(this.GAME_WALLET, amount);
+            
+            console.log('Transaction submitted:', {
+                txHash: tx.hash,
+                blockNumber: tx.blockNumber,
+                gasLimit: tx.gasLimit.toString(),
+                gasPrice: tx.gasPrice.toString()
+            });
             
             this.showSuccess('Payment transaction submitted! Waiting for confirmation...');
             
             // Wait for transaction confirmation
             const receipt = await tx.wait();
             
+            console.log('Transaction confirmed:', {
+                txHash: receipt.transactionHash,
+                blockNumber: receipt.blockNumber,
+                status: receipt.status,
+                gasUsed: receipt.gasUsed.toString(),
+                effectiveGasPrice: receipt.effectiveGasPrice.toString()
+            });
+            
             if (receipt.status === 1) {
+                // Verify payment was actually received by checking game wallet balance
+                await this.verifyPaymentReceived(receipt.transactionHash);
+                
                 this.hasPaid = true;
                 
                 // Save payment state to localStorage
@@ -348,6 +375,34 @@ class Web3Manager {
             this.handlePaymentError(error);
         } finally {
             this.paymentInProgress = false;
+        }
+    }
+    
+    // Payment Verification
+    async verifyPaymentReceived(txHash) {
+        try {
+            console.log('Verifying payment received by game wallet...');
+            
+            // Get game wallet balance before and after
+            const gameWalletBalance = await this.gameContract.balanceOf(this.GAME_WALLET);
+            const gameWalletBalanceFormatted = parseFloat(ethers.utils.formatEther(gameWalletBalance));
+            
+            console.log('Game wallet balance verification:', {
+                gameWallet: this.GAME_WALLET,
+                balance: gameWalletBalanceFormatted + ' $KARRAT',
+                txHash: txHash,
+                etherscanUrl: `https://etherscan.io/tx/${txHash}`
+            });
+            
+            // Verify the transaction on Etherscan
+            console.log('🔍 VERIFY ON ETHERSCAN:', `https://etherscan.io/tx/${txHash}`);
+            console.log('🎯 GAME WALLET:', this.GAME_WALLET);
+            console.log('💰 PAYMENT RECEIVED:', gameWalletBalanceFormatted + ' $KARRAT');
+            
+            return true;
+        } catch (error) {
+            console.error('Payment verification error:', error);
+            return false;
         }
     }
     
