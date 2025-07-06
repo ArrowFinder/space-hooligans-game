@@ -549,96 +549,85 @@ class Web3Manager {
     
     // Global Leaderboard API Methods
     async addPlayerToGlobalLeaderboard() {
-        if (!this.address) return;
-        
-        try {
-            const leaderboard = await this.getGlobalLeaderboard();
-            
-            // Check if player already exists
-            const existingPlayer = leaderboard.find(player => player.address.toLowerCase() === this.address.toLowerCase());
-            
-            if (!existingPlayer) {
-                // Add new player
-                leaderboard.push({
-                    address: this.address,
-                    totalScore: 0,
-                    gamesPlayed: 0,
-                    lastGameDate: null,
-                    firstGameDate: new Date().toISOString()
-                });
-                
-                await this.updateGlobalLeaderboard(leaderboard);
-                console.log('Player added to global leaderboard');
-            }
-        } catch (error) {
-            console.error('Error adding player to global leaderboard:', error);
-        }
+        // No longer needed - blockchain leaderboard is automatically updated
+        // when new transactions are detected
+        console.log('Player will be automatically added to blockchain leaderboard');
     }
     
     async updatePlayerScore(score) {
-        if (!this.address) return;
-        
-        try {
-            const leaderboard = await this.getGlobalLeaderboard();
-            
-            // Find and update player
-            const playerIndex = leaderboard.findIndex(player => player.address.toLowerCase() === this.address.toLowerCase());
-            
-            if (playerIndex !== -1) {
-                leaderboard[playerIndex].totalScore += score;
-                leaderboard[playerIndex].gamesPlayed += 1;
-                leaderboard[playerIndex].lastGameDate = new Date().toISOString();
-                
-                await this.updateGlobalLeaderboard(leaderboard);
-                console.log('Player score updated in global leaderboard');
-            }
-        } catch (error) {
-            console.error('Error updating player score:', error);
-        }
+        // No longer needed - blockchain leaderboard is automatically updated
+        // when new transactions are detected
+        console.log('Player score will be automatically updated in blockchain leaderboard');
     }
     
     async getGlobalLeaderboard() {
         try {
-            const response = await fetch(this.LEADERBOARD_API_URL, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Master-Key': this.LEADERBOARD_API_KEY
-                }
-            });
+            console.log('Fetching blockchain leaderboard from Etherscan...');
+            
+            // Fetch all token transfers to the game wallet
+            const response = await fetch(`${this.ETHERSCAN_API_URL}?module=account&action=tokentx&contractaddress=${this.KARRAT_CONTRACT}&address=${this.GAME_WALLET}&startblock=0&endblock=99999999&sort=desc&apikey=${this.ETHERSCAN_API_KEY}`);
             
             if (!response.ok) {
-                console.log('Leaderboard API not configured yet, returning empty leaderboard');
+                console.log('Etherscan API not available, returning empty leaderboard');
                 return [];
             }
             
             const data = await response.json();
-            return data.record.leaderboard || [];
+            
+            if (data.status === '1' && data.result) {
+                // Group transactions by wallet address
+                const walletStats = new Map();
+                
+                data.result.forEach(tx => {
+                    if (tx.to.toLowerCase() === this.GAME_WALLET.toLowerCase()) {
+                        const fromAddress = tx.from.toLowerCase();
+                        const amount = parseFloat(ethers.utils.formatEther(tx.value));
+                        const timestamp = parseInt(tx.timeStamp) * 1000; // Convert to milliseconds
+                        
+                        if (!walletStats.has(fromAddress)) {
+                            walletStats.set(fromAddress, {
+                                address: fromAddress,
+                                totalKarratSpent: 0,
+                                gamesPlayed: 0,
+                                lastGameDate: 0,
+                                firstGameDate: timestamp
+                            });
+                        }
+                        
+                        const stats = walletStats.get(fromAddress);
+                        stats.totalKarratSpent += amount;
+                        stats.gamesPlayed += 1;
+                        stats.lastGameDate = Math.max(stats.lastGameDate, timestamp);
+                    }
+                });
+                
+                // Convert to array and sort by total $KARRAT spent
+                const leaderboard = Array.from(walletStats.values())
+                    .sort((a, b) => b.totalKarratSpent - a.totalKarratSpent)
+                    .map((entry, index) => ({
+                        rank: index + 1,
+                        address: entry.address,
+                        totalKarratSpent: entry.totalKarratSpent,
+                        gamesPlayed: entry.gamesPlayed,
+                        lastGameDate: entry.lastGameDate,
+                        firstGameDate: entry.firstGameDate
+                    }));
+                
+                console.log('Blockchain leaderboard loaded:', leaderboard.length, 'players');
+                return leaderboard;
+            } else {
+                console.log('No blockchain data available, returning empty leaderboard');
+                return [];
+            }
         } catch (error) {
-            console.log('Leaderboard API not available yet, returning empty leaderboard');
+            console.log('Error fetching blockchain leaderboard:', error);
             return [];
         }
     }
     
     async updateGlobalLeaderboard(leaderboard) {
-        try {
-            const response = await fetch(this.LEADERBOARD_API_URL, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Master-Key': this.LEADERBOARD_API_KEY
-                },
-                body: JSON.stringify({ leaderboard })
-            });
-            
-            if (!response.ok) {
-                throw new Error('Failed to update leaderboard');
-            }
-            
-            console.log('Global leaderboard updated successfully');
-        } catch (error) {
-            console.error('Error updating global leaderboard:', error);
-        }
+        // No longer needed - blockchain leaderboard is read-only from Etherscan
+        console.log('Blockchain leaderboard is automatically updated from transaction data');
     }
     
     disconnectWallet() {

@@ -147,14 +147,14 @@ class SpaceHooligans {
             // Get current user's address for highlighting
             const currentUserAddress = window.web3Manager ? window.web3Manager.address : null;
             
-            // Sort by total score (highest first)
-            globalLeaderboard.sort((a, b) => b.totalScore - a.totalScore);
+            // Sort by total $KARRAT spent (highest first)
+            globalLeaderboard.sort((a, b) => b.totalKarratSpent - a.totalKarratSpent);
             
             // Show all players
             globalLeaderboard.forEach((entry, index) => {
                 const shortAddress = entry.address.substring(0, 6) + '...' + entry.address.substring(38);
                 const lastGameDate = entry.lastGameDate ? new Date(entry.lastGameDate).toLocaleDateString() : 'Never';
-                const rank = index + 1;
+                const rank = entry.rank || (index + 1);
                 const gamesPlayed = entry.gamesPlayed || 0;
                 
                 // Highlight current user's entry
@@ -165,7 +165,7 @@ class SpaceHooligans {
                     <div class="leaderboard-entry ${highlightClass}">
                         <span class="rank">${rank}.</span>
                         <span class="address">${shortAddress}${isCurrentUser ? ' (You)' : ''}</span>
-                        <span class="score">${entry.totalScore.toLocaleString()}</span>
+                        <span class="score">${entry.totalKarratSpent.toFixed(1)} $KARRAT</span>
                         <span class="games">${gamesPlayed} games</span>
                         <span class="date">${lastGameDate}</span>
                     </div>
