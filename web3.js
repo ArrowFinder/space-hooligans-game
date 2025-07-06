@@ -9,6 +9,7 @@ class Web3Manager {
         this.karratBalance = 0;
         this.hasPaid = false;
         this.isConnecting = false;
+        this.paymentInProgress = false; // Prevent multiple payment attempts
         
         // Contract configuration - using correct checksummed address
         this.KARRAT_CONTRACT = '0xAcd2c239012D17BEB128B0944D49015104113650';
@@ -117,7 +118,7 @@ class Web3Manager {
     }
     
     async connectMetaMask() {
-        if (this.isConnecting) return;
+        if (this.isConnecting || this.paymentInProgress) return;
         
         this.isConnecting = true;
         this.updateUIState('connecting');
@@ -201,25 +202,17 @@ class Web3Manager {
                     return window.ethereum;
                 }
                 return null;
-            },
-            
-            // Approach 4: Check for legacy web3
-            () => {
-                if (typeof window.web3 !== 'undefined' && window.web3.currentProvider) {
-                    return window.web3.currentProvider;
-                }
-                return null;
             }
         ];
         
-        for (let i = 0; i < approaches.length; i++) {
+        for (const approach of approaches) {
             try {
-                const result = await approaches[i]();
+                const result = await approach();
                 if (result) {
                     return result;
                 }
             } catch (error) {
-                // Silent fail and continue to next approach
+                console.warn('MetaMask detection approach failed:', error);
             }
         }
         
@@ -227,185 +220,108 @@ class Web3Manager {
     }
     
     async setupWalletInfo() {
-        if (!this.address) return;
+        if (!this.provider || !this.address) return;
         
-        this.updateUIState('connected');
-        
-        // Update wallet address display
-        document.getElementById('walletAddress').textContent = 
-            this.address.substring(0, 6) + '...' + this.address.substring(38);
-        
-        // Get KARRAT balance
-        await this.getKarratBalance();
-        
-        // Show wallet info
-        document.getElementById('walletInfo').style.display = 'block';
-        
-                    // Initialize contracts
-            this.gameContract = new ethers.Contract(
-                this.KARRAT_CONTRACT,
-                this.KARRAT_ABI,
-                this.signer
-            );
-            
-            this.leaderboardContract = new ethers.Contract(
-                this.LEADERBOARD_CONTRACT,
-                this.LEADERBOARD_ABI,
-                this.signer
-            );
+        try {
+            await this.getKarratBalance();
+        } catch (error) {
+            console.error('Error setting up wallet info:', error);
+        }
     }
     
     async getKarratBalance() {
+        if (!this.provider || !this.address) return 0;
+        
         try {
-            if (!this.address) return;
-            
-            console.log('Checking KARRAT balance for address:', this.address);
-            console.log('Using KARRAT contract:', this.KARRAT_CONTRACT);
-            
-            // Fix the contract address checksum
-            const checksummedContract = ethers.utils.getAddress(this.KARRAT_CONTRACT);
-            console.log('Checksummed contract address:', checksummedContract);
-            
-            const contract = new ethers.Contract(
-                checksummedContract,
-                this.KARRAT_ABI,
-                this.provider
-            );
-            
-            console.log('Contract instance created, calling balanceOf...');
-            
-            const balance = await contract.balanceOf(this.address);
-            console.log('Raw balance from contract:', balance.toString());
-            
+            // Try primary contract address first
+            this.gameContract = new ethers.Contract(this.KARRAT_CONTRACT, this.KARRAT_ABI, this.provider);
+            const balance = await this.gameContract.balanceOf(this.address);
             this.karratBalance = parseFloat(ethers.utils.formatEther(balance));
-            console.log('Formatted balance:', this.karratBalance);
-            
-            document.getElementById('karratBalance').textContent = 
-                this.karratBalance.toFixed(2);
-                
+            return this.karratBalance;
         } catch (error) {
-            console.error('Error getting KARRAT balance:', error);
-            console.error('Error details:', {
-                message: error.message,
-                code: error.code,
-                data: error.data
-            });
-            
-            // Try alternative contract address if the first one fails
-            if (error.message.includes('execution reverted') || error.message.includes('invalid address')) {
-                console.log('Trying alternative KARRAT contract address...');
-                await this.tryAlternativeKarratContract();
-            } else {
-                document.getElementById('karratBalance').textContent = 'Error';
-                this.karratBalance = 0;
-            }
+            console.warn('Primary KARRAT contract failed, trying alternative:', error);
+            return await this.tryAlternativeKarratContract();
         }
     }
     
     async tryAlternativeKarratContract() {
-        // Alternative KARRAT contract addresses to try (with proper checksums)
+        // Alternative KARRAT contract addresses (if needed)
         const alternativeAddresses = [
-            '0xAcd2c239012D17BEB128B0944D49015104113650', // Main KARRAT contract
-            '0x1E4a5963aBFD975d8c9021ce480b42188849D41d', // Alternative 1
-            '0x4E84E9e5fb0A972628Cf4565c3E4dC1c5A97b708'  // Alternative 2
+            '0x4E84E9E5fb0A972628Cf4565cC3a002A70b6C520', // Alternative address
+            '0x4e84e9e5fb0a972628cf4565cc3a002a70b6c520'  // Lowercase version
         ];
         
-        for (const contractAddress of alternativeAddresses) {
+        for (const address of alternativeAddresses) {
             try {
-                console.log('Trying KARRAT contract:', contractAddress);
-                
-                // Fix the contract address checksum
-                const checksummedContract = ethers.utils.getAddress(contractAddress);
-                console.log('Checksummed contract address:', checksummedContract);
-                
-                const contract = new ethers.Contract(
-                    checksummedContract,
-                    this.KARRAT_ABI,
-                    this.provider
-                );
-                
+                const contract = new ethers.Contract(address, this.KARRAT_ABI, this.provider);
                 const balance = await contract.balanceOf(this.address);
                 this.karratBalance = parseFloat(ethers.utils.formatEther(balance));
-                
-                console.log('Success with contract:', checksummedContract, 'Balance:', this.karratBalance);
-                
-                // Update the contract address for future use
-                this.KARRAT_CONTRACT = checksummedContract;
-                
-                document.getElementById('karratBalance').textContent = 
-                    this.karratBalance.toFixed(2);
-                    
-                return; // Success, exit the function
-                
+                this.KARRAT_CONTRACT = address; // Update to working address
+                this.gameContract = contract;
+                return this.karratBalance;
             } catch (error) {
-                console.log('Failed with contract:', contractAddress, 'Error:', error.message);
-                continue; // Try next address
+                console.warn(`Alternative contract ${address} failed:`, error);
             }
         }
         
-        // If all addresses fail, show error
-        console.error('All KARRAT contract addresses failed');
-        document.getElementById('karratBalance').textContent = 'Error';
         this.karratBalance = 0;
+        return 0;
     }
     
     async payToPlay() {
-        if (!this.signer || !this.gameContract) {
-            this.showError('Please connect MetaMask first.');
+        if (this.paymentInProgress) {
+            console.log('Payment already in progress');
             return;
         }
         
-        if (this.karratBalance < 1) {
-            this.showError('Insufficient $KARRAT balance. You need at least 1 $KARRAT to play.');
-            return;
-        }
-        
-        const payButton = document.getElementById('payButton');
-        const originalText = payButton.textContent;
+        this.paymentInProgress = true;
+        this.updateUIState('paying');
+        this.hideMessages();
         
         try {
-            payButton.disabled = true;
-            payButton.textContent = 'Processing...';
-            this.hideMessages();
+            if (!this.provider || !this.signer || !this.address) {
+                throw new Error('Please connect your MetaMask wallet first.');
+            }
             
+            if (this.karratBalance < 1) {
+                throw new Error(`Insufficient $KARRAT balance. You have ${this.karratBalance.toFixed(2)} $KARRAT, but need 1 $KARRAT to play.`);
+            }
+            
+            // Transfer 1 $KARRAT to game wallet
             const amount = ethers.utils.parseEther('1');
-            const tx = await this.gameContract.transfer(this.GAME_WALLET, amount);
+            const tx = await this.gameContract.connect(this.signer).transfer(this.GAME_WALLET, amount);
             
-            payButton.textContent = 'Confirming...';
+            this.showSuccess('Payment transaction submitted! Waiting for confirmation...');
             
+            // Wait for transaction confirmation
             const receipt = await tx.wait();
             
             if (receipt.status === 1) {
                 this.hasPaid = true;
                 
+                // Save payment state to localStorage
                 localStorage.setItem('spaceHooligans_payment', JSON.stringify({
                     address: this.address,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    txHash: receipt.transactionHash
                 }));
                 
                 this.showSuccess('Payment successful! You have 5 more lives!');
                 
-                // If we're on the game over screen, start a new game immediately
-                const gameOverOverlay = document.getElementById('gameOverOverlay');
-                if (gameOverOverlay && !gameOverOverlay.classList.contains('hidden')) {
-                    setTimeout(() => {
-                        if (window.game) {
-                            window.game.startGame();
-                        }
-                    }, 2000);
-                } else {
-                    setTimeout(() => showMenu(), 2000);
-                }
+                // Update balance
+                await this.getKarratBalance();
+                
+                // Show game menu
+                showMenu();
             } else {
-                throw new Error('Transaction failed');
+                throw new Error('Transaction failed. Please try again.');
             }
             
         } catch (error) {
             console.error('Payment error:', error);
             this.handlePaymentError(error);
         } finally {
-            payButton.disabled = false;
-            payButton.textContent = originalText;
+            this.paymentInProgress = false;
         }
     }
     
@@ -416,129 +332,190 @@ class Web3Manager {
         this.karratBalance = 0;
         this.hasPaid = false;
         this.gameContract = null;
-        this.isConnecting = false;
+        this.leaderboardContract = null;
+        this.connectionRetries = 0;
         
+        // Clear localStorage
         localStorage.removeItem('spaceHooligans_payment');
         
         this.updateUIState('disconnected');
         this.hideMessages();
-        showWalletScreen();
     }
     
     resetPaymentState() {
         this.hasPaid = false;
         localStorage.removeItem('spaceHooligans_payment');
+        // Don't disconnect wallet, just reset payment state
     }
     
     updateUIState(state) {
-        const metamaskButton = document.querySelector('.metamask-button');
-        const payButton = document.getElementById('payButton');
+        const connectBtn = document.getElementById('connectWalletBtn');
+        const payBtn = document.getElementById('payToPlayBtn');
+        const balanceDisplay = document.getElementById('karratBalance');
+        const addressDisplay = document.getElementById('walletAddress');
         
-        switch (state) {
-            case 'connecting':
-                metamaskButton.disabled = true;
-                metamaskButton.textContent = 'Connecting...';
-                break;
-            case 'connected':
-                metamaskButton.disabled = false;
-                metamaskButton.innerHTML = '<img src="https://cdn.iconscout.com/icon/free/png-256/metamask-2728406-2261817.png" alt="MetaMask">Connect MetaMask';
-                break;
-            case 'disconnected':
-                document.getElementById('walletInfo').style.display = 'none';
-                document.getElementById('walletAddress').textContent = '...';
-                document.getElementById('karratBalance').textContent = '0';
-                metamaskButton.disabled = false;
-                metamaskButton.innerHTML = '<img src="https://cdn.iconscout.com/icon/free/png-256/metamask-2728406-2261817.png" alt="MetaMask">Connect MetaMask';
-                break;
+        if (connectBtn) {
+            switch (state) {
+                case 'connecting':
+                    connectBtn.textContent = 'Connecting...';
+                    connectBtn.disabled = true;
+                    break;
+                case 'connected':
+                    connectBtn.textContent = 'Connected';
+                    connectBtn.disabled = true;
+                    break;
+                case 'paying':
+                    connectBtn.textContent = 'Processing Payment...';
+                    connectBtn.disabled = true;
+                    break;
+                default:
+                    connectBtn.textContent = 'Connect MetaMask';
+                    connectBtn.disabled = false;
+            }
+        }
+        
+        if (payBtn) {
+            payBtn.disabled = state === 'paying' || state === 'connecting';
+        }
+        
+        if (balanceDisplay && this.karratBalance !== undefined) {
+            balanceDisplay.textContent = `${this.karratBalance.toFixed(2)} $KARRAT`;
+        }
+        
+        if (addressDisplay && this.address) {
+            const shortAddress = `${this.address.slice(0, 6)}...${this.address.slice(-4)}`;
+            addressDisplay.textContent = shortAddress;
         }
     }
     
     handleConnectionError(error) {
-        let message = 'Failed to connect MetaMask. Please try again.';
+        let message = 'Failed to connect to MetaMask.';
         
-        if (error.message.includes('not installed')) {
-            message = 'MetaMask is not installed. Please install the MetaMask browser extension and try again.';
+        if (error.message.includes('MetaMask is not installed')) {
+            message = 'MetaMask is not installed. Please install the MetaMask browser extension.';
         } else if (error.message.includes('No accounts found')) {
             message = 'No accounts found. Please unlock MetaMask and try again.';
-        } else if (error.message.includes('User rejected')) {
-            message = 'Connection was cancelled. Please try again.';
         } else if (error.message.includes('Ethereum Mainnet')) {
-            message = 'Please switch to Ethereum Mainnet in MetaMask and try again.';
+            message = 'Please switch to Ethereum Mainnet in MetaMask.';
+        } else if (error.message.includes('User rejected')) {
+            message = 'Connection was rejected. Please try again.';
         }
         
         this.showError(message);
+        this.updateUIState('disconnected');
     }
     
     handlePaymentError(error) {
         let message = 'Payment failed. Please try again.';
         
-        if (error.message.includes('insufficient funds')) {
-            message = 'Insufficient funds for gas fees. Please add ETH to your wallet.';
+        if (error.message.includes('Insufficient')) {
+            message = error.message;
         } else if (error.message.includes('User rejected')) {
-            message = 'Transaction was cancelled. Please try again.';
-        } else if (error.message.includes('insufficient allowance')) {
-            message = 'Insufficient token allowance. Please approve the transaction.';
-        } else if (error.message.includes('network')) {
-            message = 'Network error. Please check your connection and try again.';
+            message = 'Payment was rejected. Please try again.';
+        } else if (error.message.includes('insufficient funds')) {
+            message = 'Insufficient ETH for gas fees. Please add more ETH to your wallet.';
         }
         
         this.showError(message);
+        this.updateUIState('connected');
     }
     
     showError(message) {
-        const errorElement = document.getElementById('errorMessage');
-        errorElement.textContent = message;
-        errorElement.style.display = 'block';
-        document.getElementById('successMessage').style.display = 'none';
+        const errorDiv = document.getElementById('errorMessage');
+        if (errorDiv) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
     }
     
     showSuccess(message) {
-        const successElement = document.getElementById('successMessage');
-        successElement.textContent = message;
-        successElement.style.display = 'block';
-        document.getElementById('errorMessage').style.display = 'none';
+        const successDiv = document.getElementById('successMessage');
+        if (successDiv) {
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+        }
     }
     
     hideMessages() {
-        document.getElementById('errorMessage').style.display = 'none';
-        document.getElementById('successMessage').style.display = 'none';
+        const errorDiv = document.getElementById('errorMessage');
+        const successDiv = document.getElementById('successMessage');
+        
+        if (errorDiv) errorDiv.style.display = 'none';
+        if (successDiv) successDiv.style.display = 'none';
     }
     
     async submitScoreToBlockchain(score, gamesPlayed) {
-        if (!this.leaderboardContract || !this.signer) {
-            console.error('Leaderboard contract not initialized');
-            return false;
+        if (!this.leaderboardContract || this.LEADERBOARD_CONTRACT === '0x0000000000000000000000000000000000000000') {
+            console.log('Leaderboard contract not deployed yet');
+            return;
         }
         
         try {
-            const tx = await this.leaderboardContract.submitScore(score, gamesPlayed);
+            const tx = await this.leaderboardContract.connect(this.signer).submitScore(score, gamesPlayed);
             await tx.wait();
-            return true;
+            console.log('Score submitted to blockchain');
         } catch (error) {
             console.error('Error submitting score to blockchain:', error);
-            return false;
         }
     }
     
     async getBlockchainLeaderboard() {
-        if (!this.leaderboardContract) {
-            console.error('Leaderboard contract not initialized');
+        if (!this.leaderboardContract || this.LEADERBOARD_CONTRACT === '0x0000000000000000000000000000000000000000') {
             return [];
         }
         
         try {
-            const leaderboard = await this.leaderboardContract.getTopScores(10);
+            const leaderboard = await this.leaderboardContract.getLeaderboard();
             return leaderboard.map(entry => ({
                 address: entry.player,
-                score: entry.score.toNumber(),
-                gamesPlayed: entry.gamesPlayed.toNumber(),
-                timestamp: entry.timestamp.toNumber() * 1000 // Convert to milliseconds
+                score: parseInt(entry.score),
+                gamesPlayed: parseInt(entry.gamesPlayed),
+                timestamp: parseInt(entry.timestamp)
             }));
         } catch (error) {
-            console.error('Error fetching blockchain leaderboard:', error);
+            console.error('Error getting blockchain leaderboard:', error);
             return [];
         }
     }
+}
+
+// Global functions for UI interaction
+function connectMetaMask() {
+    if (window.web3Manager) {
+        window.web3Manager.connectMetaMask();
+    }
+}
+
+function refreshBalance() {
+    if (window.web3Manager) {
+        window.web3Manager.getKarratBalance();
+    }
+}
+
+function payToPlay() {
+    if (window.web3Manager) {
+        window.web3Manager.payToPlay();
+    }
+}
+
+function disconnectWallet() {
+    if (window.web3Manager) {
+        window.web3Manager.disconnectWallet();
+    }
+}
+
+function showWalletScreen() {
+    document.getElementById('menuOverlay').classList.add('hidden');
+    document.getElementById('walletScreen').classList.remove('hidden');
+}
+
+function showMenu() {
+    document.getElementById('walletScreen').classList.add('hidden');
+    document.getElementById('menuOverlay').classList.remove('hidden');
+}
+
+function showGameOver() {
+    document.getElementById('gameOverOverlay').classList.remove('hidden');
 }
 
 // Global Web3 manager instance
@@ -548,54 +525,4 @@ let web3Manager;
 document.addEventListener('DOMContentLoaded', () => {
     web3Manager = new Web3Manager();
     window.web3Manager = web3Manager;
-});
-
-// Global functions for HTML onclick handlers
-function connectMetaMask() {
-    web3Manager.connectMetaMask();
-}
-
-function refreshBalance() {
-    if (web3Manager && web3Manager.address) {
-        web3Manager.getKarratBalance();
-    } else {
-        alert('Please connect MetaMask first.');
-    }
-}
-
-function payToPlay() {
-    if (web3Manager) {
-        web3Manager.payToPlay();
-    } else {
-        alert('Web3 manager not initialized. Please refresh the page.');
-    }
-}
-
-function disconnectWallet() {
-    web3Manager.disconnectWallet();
-}
-
-// UI Management Functions
-function showWalletScreen() {
-    document.getElementById('walletOverlay').classList.remove('hidden');
-    document.getElementById('menuOverlay').classList.add('hidden');
-    document.getElementById('gameOverOverlay').classList.add('hidden');
-}
-
-function showMenu() {
-    document.getElementById('walletOverlay').classList.add('hidden');
-    document.getElementById('menuOverlay').classList.remove('hidden');
-    document.getElementById('gameOverOverlay').classList.add('hidden');
-}
-
-function showGameOver() {
-    document.getElementById('walletOverlay').classList.add('hidden');
-    document.getElementById('menuOverlay').classList.add('hidden');
-    document.getElementById('gameOverOverlay').classList.remove('hidden');
-}
-
-// Export for game.js
-window.web3Manager = web3Manager;
-window.showWalletScreen = showWalletScreen;
-window.showMenu = showMenu;
-window.showGameOver = showGameOver; 
+}); 

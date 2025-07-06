@@ -140,22 +140,35 @@ class SpaceHooligans {
         
         let html = '';
         
-        this.leaderboard.slice(0, 10).forEach((entry, index) => {
+        // Get current user's address for highlighting
+        const currentUserAddress = window.web3Manager ? window.web3Manager.address : null;
+        
+        // Show all players (not just top 10)
+        this.leaderboard.forEach((entry, index) => {
             const shortAddress = entry.address.substring(0, 6) + '...' + entry.address.substring(38);
             const date = new Date(entry.timestamp).toLocaleDateString();
             const rank = index + 1;
             const gamesPlayed = entry.gamesPlayed || 1;
             
+            // Highlight current user's entry
+            const isCurrentUser = currentUserAddress && entry.address.toLowerCase() === currentUserAddress.toLowerCase();
+            const highlightClass = isCurrentUser ? 'current-user' : '';
+            
             html += `
-                <div class="leaderboard-entry">
+                <div class="leaderboard-entry ${highlightClass}">
                     <span class="rank">${rank}.</span>
-                    <span class="address">${shortAddress}</span>
+                    <span class="address">${shortAddress}${isCurrentUser ? ' (You)' : ''}</span>
                     <span class="score">${entry.score.toLocaleString()}</span>
                     <span class="games">${gamesPlayed} games</span>
                     <span class="date">${date}</span>
                 </div>
             `;
         });
+        
+        // Add message if no entries
+        if (this.leaderboard.length === 0) {
+            html = '<div class="leaderboard-entry">No scores yet. Be the first to play!</div>';
+        }
         
         if (leaderboardElement) {
             leaderboardElement.innerHTML = html;
@@ -251,8 +264,17 @@ class SpaceHooligans {
             return;
         }
         
+        // Check if user has paid and is still connected
         if (!window.web3Manager.hasPaid) {
-            alert('Please connect your wallet and pay 1 $KARRAT to play!');
+            // Don't automatically try to connect - let user choose
+            showWalletScreen();
+            return;
+        }
+        
+        // Check if wallet is still connected
+        if (!window.web3Manager.address) {
+            alert('Wallet connection lost. Please reconnect your wallet.');
+            showWalletScreen();
             return;
         }
         
@@ -273,6 +295,7 @@ class SpaceHooligans {
         document.getElementById('gameOverOverlay').classList.add('hidden');
         document.getElementById('lifeLostOverlay').classList.add('hidden');
         document.getElementById('leaderboardOverlay').classList.add('hidden');
+        document.getElementById('walletScreen').classList.add('hidden');
         
         // Update UI
         this.updateGameUI();
