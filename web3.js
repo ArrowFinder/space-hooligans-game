@@ -172,6 +172,9 @@ class Web3Manager {
             await this.setupWalletInfo();
             this.showSuccess('MetaMask connected successfully!');
             
+            // Update UI to connected state
+            this.updateUIState('connected');
+            
         } catch (error) {
             console.error('MetaMask connection error:', error);
             this.handleConnectionError(error);
@@ -228,7 +231,12 @@ class Web3Manager {
         if (!this.provider || !this.address) return;
         
         try {
+            console.log('Setting up wallet info for address:', this.address);
             await this.getKarratBalance();
+            console.log('Balance fetched:', this.karratBalance);
+            
+            // Force UI update after balance is fetched
+            this.updateUIState('connected');
         } catch (error) {
             console.error('Error setting up wallet info:', error);
         }
