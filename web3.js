@@ -19,8 +19,8 @@ class Web3Manager {
         this.LEADERBOARD_CONTRACT = '0x0000000000000000000000000000000000000000'; // Placeholder - will be updated after deployment
         
         // Global Leaderboard API Configuration
-        this.LEADERBOARD_API_URL = 'https://api.jsonbin.io/v3/b/65f8b8c8266cfc3fde8b8c8c'; // Free JSONBin.io storage
-        this.LEADERBOARD_API_KEY = '$2a$10$YourApiKeyHere'; // Will be updated with real key
+        this.LEADERBOARD_API_URL = 'https://api.jsonbin.io/v3/b/686a15ad8561e97a50325112'; // Free JSONBin.io storage
+        this.LEADERBOARD_API_KEY = '$2a$10$9ENFV8/nfR1RZPbq4gP08uO4aGyczMGM3/5EQt9mqgzLrDJmQqWzu'; // JSONBin.io Master Key
         
         // Etherscan API Configuration for blockchain stats
         this.ETHERSCAN_API_KEY = 'MR8TZ35Z9UH32JM6YPX88W9B784NXXTM3C';
@@ -564,82 +564,227 @@ class Web3Manager {
     }
     
     async updatePlayerScore(score) {
-        // No longer needed - blockchain leaderboard is automatically updated
-        // when new transactions are detected
-        console.log('Player score will be automatically updated in blockchain leaderboard');
+        if (!this.address) {
+            console.log('No wallet connected, cannot update score');
+            return;
+        }
+        
+        try {
+            console.log('Updating player score:', {
+                address: this.address,
+                score: score
+            });
+            
+            // Get current leaderboard data
+            const response = await fetch(this.LEADERBOARD_API_URL, {
+                headers: {
+                    'X-Master-Key': this.LEADERBOARD_API_KEY,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                console.log('Failed to fetch current leaderboard data');
+                return;
+            }
+            
+            const data = await response.json();
+            let leaderboard = data.record?.leaderboard || [];
+            let metadata = data.record?.metadata || {};
+            let settings = data.record?.settings || {};
+            
+            // Check if we need to reset the leaderboard (100 days)
+            const now = Date.now();
+            
+            // Initialize lastReset if it doesn't exist (first time setup)
+            if (!metadata.lastReset) {
+                metadata.lastReset = now;
+                console.log('🆕 Initializing leaderboard reset timestamp');
+            }
+            
+            const lastReset = metadata.lastReset;
+            const daysSinceReset = (now - lastReset) / (1000 * 60 * 60 * 24);
+            
+            if (daysSinceReset >= 100) {
+                console.log('🔄 100 days passed, resetting leaderboard...');
+                
+                // Backup current season data before reset
+                try {
+                    console.log('💾 Backing up Season #1 data...');
+                    
+                    // Create season backup data
+                    const seasonBackup = {
+                        seasonNumber: metadata.resetCount || 1,
+                        seasonStartDate: lastReset,
+                        seasonEndDate: now,
+                        totalDays: daysSinceReset,
+                        leaderboard: leaderboard,
+                        metadata: {
+                            totalPlayers: metadata.totalPlayers || 0,
+                            totalGames: metadata.totalGames || 0,
+                            totalScore: metadata.totalScore || 0,
+                            seasonStats: {
+                                averageScore: metadata.totalScore && metadata.totalGames ? 
+                                    Math.round(metadata.totalScore / metadata.totalGames) : 0,
+                                topScore: leaderboard.length > 0 ? leaderboard[0].highestScore : 0,
+                                mostActivePlayer: leaderboard.length > 0 ? leaderboard[0].address : null
+                            }
+                        },
+                        backupDate: now
+                    };
+                    
+                    // Save to season backup bin (using a different bin ID for season archives)
+                    const backupResponse = await fetch('https://api.jsonbin.io/v3/b/65f8b8b8266cfc3fde8b1234', {
+                        method: 'PUT',
+                        headers: {
+                            'X-Master-Key': this.LEADERBOARD_API_KEY,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            seasonBackups: [seasonBackup]
+                        })
+                    });
+                    
+                    if (backupResponse.ok) {
+                        console.log('✅ Season #1 data backed up successfully');
+                    } else {
+                        console.error('❌ Failed to backup season data');
+                    }
+                } catch (error) {
+                    console.error('❌ Error backing up season data:', error);
+                }
+                
+                // Reset leaderboard for new season
+                leaderboard = [];
+                metadata.lastReset = now;
+                metadata.resetCount = (metadata.resetCount || 0) + 1;
+                console.log('✅ Leaderboard reset complete for Season #2');
+            }
+            
+            // Find existing player or create new entry
+            const existingIndex = leaderboard.findIndex(entry => 
+                entry.address.toLowerCase() === this.address.toLowerCase()
+            );
+            
+            if (existingIndex !== -1) {
+                // Update existing player
+                leaderboard[existingIndex].totalScore += score;
+                leaderboard[existingIndex].highestScore = Math.max(leaderboard[existingIndex].highestScore, score);
+                leaderboard[existingIndex].gamesPlayed += 1;
+                leaderboard[existingIndex].lastGameDate = now;
+            } else {
+                // Add new player
+                leaderboard.push({
+                    address: this.address.toLowerCase(),
+                    totalScore: score,
+                    highestScore: score,
+                    gamesPlayed: 1,
+                    firstGameDate: now,
+                    lastGameDate: now
+                });
+            }
+            
+            // Sort by total score (highest first)
+            leaderboard.sort((a, b) => b.totalScore - a.totalScore);
+            
+            // Update metadata
+            metadata.totalPlayers = leaderboard.length;
+            metadata.totalGames = leaderboard.reduce((sum, player) => sum + player.gamesPlayed, 0);
+            metadata.totalScore = leaderboard.reduce((sum, player) => sum + player.totalScore, 0);
+            metadata.lastUpdated = new Date().toISOString();
+            
+            // Update the leaderboard on JSONBin.io
+            const updateResponse = await fetch(this.LEADERBOARD_API_URL, {
+                method: 'PUT',
+                headers: {
+                    'X-Master-Key': this.LEADERBOARD_API_KEY,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    leaderboard: leaderboard,
+                    metadata: metadata,
+                    settings: settings
+                })
+            });
+            
+            if (updateResponse.ok) {
+                console.log('✅ Score updated successfully:', {
+                    address: this.address,
+                    score: score,
+                    totalScore: existingIndex !== -1 ? leaderboard[existingIndex].totalScore : score,
+                    daysUntilReset: Math.max(0, 100 - daysSinceReset).toFixed(1)
+                });
+            } else {
+                console.log('Failed to update score on JSONBin.io');
+            }
+            
+        } catch (error) {
+            console.error('Error updating player score:', error);
+        }
     }
     
     async getGlobalLeaderboard() {
         try {
-            console.log('Fetching blockchain leaderboard from Etherscan...');
+            console.log('Fetching leaderboard from JSONBin.io...');
             
-            // Filter for transactions from 7/5/2025 onwards
-            const startDate = new Date('2025-07-05T00:00:00Z').getTime() / 1000; // Convert to Unix timestamp
+            const response = await fetch(this.LEADERBOARD_API_URL, {
+                headers: {
+                    'X-Master-Key': this.LEADERBOARD_API_KEY,
+                    'Content-Type': 'application/json'
+                }
+            });
             
-            // Fetch all token transfers to the game wallet from 7/5/2025 onwards
-            const response = await fetch(`${this.ETHERSCAN_API_URL}?module=account&action=tokentx&contractaddress=${this.KARRAT_CONTRACT}&address=${this.GAME_WALLET}&startblock=0&endblock=99999999&starttime=${startDate}&sort=desc&apikey=${this.ETHERSCAN_API_KEY}`);
-            
-            if (!response.ok) {
-                console.log('Etherscan API not available, returning empty leaderboard');
-                return [];
-            }
-            
-            const data = await response.json();
-            
-            if (data.status === '1' && data.result) {
-                // Group transactions by wallet address
-                const walletStats = new Map();
+            if (response.ok) {
+                const data = await response.json();
+                let leaderboard = data.record?.leaderboard || [];
                 
-                data.result.forEach(tx => {
-                    if (tx.to.toLowerCase() === this.GAME_WALLET.toLowerCase()) {
-                        const fromAddress = tx.from.toLowerCase();
-                        const timestamp = parseInt(tx.timeStamp) * 1000; // Convert to milliseconds
-                        
-                        if (!walletStats.has(fromAddress)) {
-                            walletStats.set(fromAddress, {
-                                address: fromAddress,
-                                totalScore: 0,
-                                gamesPlayed: 0,
-                                lastGameDate: 0,
-                                firstGameDate: timestamp,
-                                highestScore: 0
-                            });
-                        }
-                        
-                        const stats = walletStats.get(fromAddress);
-                        stats.gamesPlayed += 1;
-                        stats.lastGameDate = Math.max(stats.lastGameDate, timestamp);
-                        
-                        // For now, we'll use games played as a proxy for score
-                        // In a real implementation, you'd track actual game scores
-                        stats.totalScore += 1000; // Placeholder score per game
-                        stats.highestScore = Math.max(stats.highestScore, 1000);
+                // Filter out test accounts (ending in 7890 or marked as test players)
+                leaderboard = leaderboard.filter(entry => {
+                    const isTestAccount = entry.address.toLowerCase().endsWith('7890') || 
+                                        entry.isTestPlayer === true;
+                    if (isTestAccount) {
+                        console.log('Filtering out test account:', entry.address);
                     }
+                    return !isTestAccount;
                 });
                 
-                // Convert to array and sort by total score (highest first)
-                const leaderboard = Array.from(walletStats.values())
-                    .sort((a, b) => b.totalScore - a.totalScore)
-                    .map((entry, index) => ({
-                        rank: index + 1,
-                        address: entry.address,
-                        totalScore: entry.totalScore,
-                        highestScore: entry.highestScore,
-                        gamesPlayed: entry.gamesPlayed,
-                        lastGameDate: entry.lastGameDate,
-                        firstGameDate: entry.firstGameDate
-                    }));
+                console.log('📊 JSONBin.io leaderboard loaded:', {
+                    totalPlayers: leaderboard.length,
+                    players: leaderboard.map(p => ({
+                        address: p.address.substring(0, 6) + '...' + p.address.substring(38),
+                        totalScore: p.totalScore,
+                        gamesPlayed: p.gamesPlayed
+                    }))
+                });
                 
-                console.log('Blockchain leaderboard loaded:', leaderboard.length, 'players from 7/5/2025 onwards');
                 return leaderboard;
             } else {
-                console.log('No blockchain data available, returning empty leaderboard');
+                console.log('Failed to fetch JSONBin.io leaderboard, returning empty');
                 return [];
             }
         } catch (error) {
-            console.log('Error fetching blockchain leaderboard:', error);
+            console.error('Error fetching JSONBin.io leaderboard:', error);
             return [];
         }
+    }
+    
+    async getLeaderboardMetadata() {
+        try {
+            const response = await fetch(this.LEADERBOARD_API_URL, {
+                headers: {
+                    'X-Master-Key': this.LEADERBOARD_API_KEY,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                return data.record?.metadata || {};
+            }
+        } catch (error) {
+            console.error('Failed to fetch leaderboard metadata:', error);
+        }
+        return {};
     }
     
     async updateGlobalLeaderboard(leaderboard) {
@@ -833,6 +978,169 @@ class Web3Manager {
             return [];
         }
     }
+    
+    async removeTestAccounts() {
+        try {
+            console.log('Removing test accounts from leaderboard...');
+            
+            const response = await fetch(this.LEADERBOARD_API_URL, {
+                headers: {
+                    'X-Master-Key': this.LEADERBOARD_API_KEY,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch leaderboard data');
+            }
+            
+            const data = await response.json();
+            let leaderboard = data.record?.leaderboard || [];
+            let metadata = data.record?.metadata || {};
+            let settings = data.record?.settings || {};
+            
+            // Count test accounts before removal
+            const testAccounts = leaderboard.filter(entry => 
+                entry.address.toLowerCase().endsWith('7890') || 
+                entry.isTestPlayer === true
+            );
+            
+            console.log(`Found ${testAccounts.length} test accounts to remove:`, 
+                testAccounts.map(acc => acc.address.substring(0, 6) + '...' + acc.address.substring(38))
+            );
+            
+            // Remove test accounts
+            leaderboard = leaderboard.filter(entry => 
+                !entry.address.toLowerCase().endsWith('7890') && 
+                entry.isTestPlayer !== true
+            );
+            
+            // Update metadata
+            metadata.totalPlayers = leaderboard.length;
+            metadata.totalGames = leaderboard.reduce((sum, player) => sum + player.gamesPlayed, 0);
+            metadata.totalScore = leaderboard.reduce((sum, player) => sum + player.totalScore, 0);
+            metadata.lastUpdated = new Date().toISOString();
+            
+            // Save updated data
+            const updateResponse = await fetch(this.LEADERBOARD_API_URL, {
+                method: 'PUT',
+                headers: {
+                    'X-Master-Key': this.LEADERBOARD_API_KEY,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    leaderboard: leaderboard,
+                    metadata: metadata,
+                    settings: settings
+                })
+            });
+            
+            if (updateResponse.ok) {
+                console.log(`✅ Successfully removed ${testAccounts.length} test accounts from leaderboard`);
+                return testAccounts.length;
+            } else {
+                throw new Error('Failed to update leaderboard');
+            }
+            
+        } catch (error) {
+            console.error('Error removing test accounts:', error);
+            throw error;
+        }
+    }
+    
+    async getLeaderboardCountdown() {
+        try {
+            const metadata = await this.getLeaderboardMetadata();
+            console.log('📊 Countdown metadata:', metadata);
+            
+            // If no metadata or lastReset, initialize it
+            if (!metadata || !metadata.lastReset) {
+                console.log('🆕 No lastReset found, initializing...');
+                const now = Date.now();
+                
+                // Try to update the metadata with a lastReset timestamp
+                try {
+                    const response = await fetch(this.LEADERBOARD_API_URL, {
+                        headers: {
+                            'X-Master-Key': this.LEADERBOARD_API_KEY,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        const currentMetadata = data.record?.metadata || {};
+                        const currentSettings = data.record?.settings || {};
+                        const currentLeaderboard = data.record?.leaderboard || [];
+                        
+                        currentMetadata.lastReset = now;
+                        currentMetadata.lastUpdated = new Date().toISOString();
+                        
+                        const updateResponse = await fetch(this.LEADERBOARD_API_URL, {
+                            method: 'PUT',
+                            headers: {
+                                'X-Master-Key': this.LEADERBOARD_API_KEY,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                leaderboard: currentLeaderboard,
+                                metadata: currentMetadata,
+                                settings: currentSettings
+                            })
+                        });
+                        
+                        if (updateResponse.ok) {
+                            console.log('✅ Initialized lastReset timestamp');
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to initialize lastReset:', error);
+                }
+                
+                // Return initial countdown
+                return {
+                    days: 99,
+                    hours: 23,
+                    minutes: 59,
+                    seconds: 59,
+                    totalSeconds: 99 * 24 * 60 * 60 + 23 * 60 * 60 + 59 * 60 + 59,
+                    daysUntilReset: 99.99,
+                    daysSinceReset: 0.01
+                };
+            }
+            
+            const now = Date.now();
+            const lastReset = metadata.lastReset;
+            const daysSinceReset = (now - lastReset) / (1000 * 60 * 60 * 24);
+            const daysUntilReset = Math.max(0, 100 - daysSinceReset);
+            
+            // Calculate time components
+            const totalSeconds = daysUntilReset * 24 * 60 * 60;
+            const days = Math.floor(totalSeconds / (24 * 60 * 60));
+            const hours = Math.floor((totalSeconds % (24 * 60 * 60)) / (60 * 60));
+            const minutes = Math.floor((totalSeconds % (60 * 60)) / 60);
+            const seconds = Math.floor(totalSeconds % 60);
+            
+            console.log('⏰ Countdown calculated:', {
+                daysSinceReset: daysSinceReset.toFixed(2),
+                daysUntilReset: daysUntilReset.toFixed(2),
+                display: `${days}d ${hours}h ${minutes}m ${seconds}s`
+            });
+            
+            return {
+                days,
+                hours,
+                minutes,
+                seconds,
+                totalSeconds,
+                daysUntilReset,
+                daysSinceReset
+            };
+        } catch (error) {
+            console.error('Error calculating countdown:', error);
+            return null;
+        }
+    }
 }
 
 // Global functions for UI interaction
@@ -923,6 +1231,21 @@ function refreshBlockchainStats() {
     if (window.web3Manager) {
         console.log('Manually refreshing blockchain stats...');
         window.web3Manager.fetchBlockchainStats();
+    }
+}
+
+// Remove test accounts from leaderboard
+async function removeTestAccounts() {
+    if (window.web3Manager) {
+        try {
+            console.log('Removing test accounts...');
+            const removedCount = await window.web3Manager.removeTestAccounts();
+            console.log(`✅ Removed ${removedCount} test accounts from leaderboard`);
+            return removedCount;
+        } catch (error) {
+            console.error('Failed to remove test accounts:', error);
+            throw error;
+        }
     }
 }
 

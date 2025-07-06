@@ -9,14 +9,14 @@ class SpaceHooligans {
         // Game state
         this.state = 'menu';
         this.score = 0;
-        this.lives = 5; // 5 lives per payment
         this.highScore = 0;
+        this.lives = 5; // 5 lives per payment
         
-        // Intensity and difficulty scaling
-        this.baseEnemySpawnRate = 0.002; // Reduced by 90%
+        // Intensity and difficulty scaling (reduced by 90%)
+        this.baseEnemySpawnRate = 0.002; // Reduced from 0.02 (90% reduction)
         this.enemySpawnRate = this.baseEnemySpawnRate;
-        this.intensityMultiplier = 1.0;
         this.maxIntensity = 1.5; // Reduced from 3.0 (50% reduction for smoother scaling)
+        this.intensityMultiplier = 1.0;
         
         // Object pools for performance
         this.objectPools = {
@@ -37,10 +37,10 @@ class SpaceHooligans {
         this.mouseX = 0;
         this.mouseY = 0;
         this.keys = {};
+        this.invincible = false;
         
         // Performance settings
-        this.maxBullets = 3;
-        this.lastFrameTime = 0;
+        this.maxBullets = 5;
         
         // Pre-allocated objects for reuse
         this.initObjectPools();
@@ -54,9 +54,6 @@ class SpaceHooligans {
         this.loadAssets();
         this.setupEventListeners();
         this.init();
-        this.loadLeaderboard();
-        this.updateLeaderboardDisplay();
-        this.loadBlockchainLeaderboard();
     }
     
     initObjectPools() {
@@ -66,183 +63,6 @@ class SpaceHooligans {
             this.objectPools.enemies.push(new Enemy(800, 600, 0));
             this.objectPools.particles.push(new Particle(0, 0, 0));
         }
-    }
-    
-    // Leaderboard functionality
-    loadLeaderboard() {
-        try {
-            const savedLeaderboard = localStorage.getItem('spaceHooligans_leaderboard');
-            if (savedLeaderboard) {
-                this.leaderboard = JSON.parse(savedLeaderboard);
-                
-                // Ensure backward compatibility for existing entries
-                this.leaderboard.forEach(entry => {
-                    if (!entry.gamesPlayed) {
-                        entry.gamesPlayed = 1;
-                    }
-                });
-            } else {
-                this.leaderboard = [];
-            }
-        } catch (error) {
-            console.error('Error loading leaderboard:', error);
-            this.leaderboard = [];
-        }
-    }
-    
-    saveLeaderboard() {
-        try {
-            localStorage.setItem('spaceHooligans_leaderboard', JSON.stringify(this.leaderboard));
-        } catch (error) {
-            console.error('Error saving leaderboard:', error);
-        }
-    }
-    
-    async updateLeaderboard(score, walletAddress) {
-        if (!walletAddress) return;
-        
-        // Update local leaderboard
-        const existingIndex = this.leaderboard.findIndex(entry => entry.address === walletAddress);
-        
-        if (existingIndex !== -1) {
-            if (score > this.leaderboard[existingIndex].score) {
-                this.leaderboard[existingIndex].score = score;
-                this.leaderboard[existingIndex].timestamp = Date.now();
-            }
-            this.leaderboard[existingIndex].gamesPlayed = (this.leaderboard[existingIndex].gamesPlayed || 0) + 1;
-        } else {
-            this.leaderboard.push({
-                address: walletAddress,
-                score: score,
-                timestamp: Date.now(),
-                gamesPlayed: 1
-            });
-        }
-        
-        this.leaderboard.sort((a, b) => b.score - a.score);
-        if (this.leaderboard.length > 100) {
-            this.leaderboard = this.leaderboard.slice(0, 100);
-        }
-        
-        this.saveLeaderboard();
-        this.updateLeaderboardDisplay();
-        
-        // Submit to blockchain if available
-        if (window.web3Manager && window.web3Manager.leaderboardContract) {
-            const gamesPlayed = existingIndex !== -1 ? this.leaderboard[existingIndex].gamesPlayed : 1;
-            await window.web3Manager.submitScoreToBlockchain(score, gamesPlayed);
-        }
-    }
-    
-    async updateLeaderboardDisplay() {
-        const leaderboardElement = document.getElementById('leaderboard');
-        const leaderboardContent = document.getElementById('leaderboardContent');
-        
-        try {
-            // Load global leaderboard from API
-            const globalLeaderboard = await loadGlobalLeaderboard();
-            
-            let html = '';
-            
-            // Get current user's address for highlighting
-            const currentUserAddress = window.web3Manager ? window.web3Manager.address : null;
-            
-            // Sort by total score (highest first)
-            globalLeaderboard.sort((a, b) => b.totalScore - a.totalScore);
-            
-            // Show all players
-            globalLeaderboard.forEach((entry, index) => {
-                const shortAddress = entry.address.substring(0, 6) + '...' + entry.address.substring(38);
-                const lastGameDate = entry.lastGameDate ? new Date(entry.lastGameDate).toLocaleDateString() : 'Never';
-                const rank = entry.rank || (index + 1);
-                const gamesPlayed = entry.gamesPlayed || 0;
-                
-                // Highlight current user's entry
-                const isCurrentUser = currentUserAddress && entry.address.toLowerCase() === currentUserAddress.toLowerCase();
-                const highlightClass = isCurrentUser ? 'current-user' : '';
-                
-                html += `
-                    <div class="leaderboard-entry ${highlightClass}">
-                        <span class="rank">${rank}.</span>
-                        <span class="address">${shortAddress}${isCurrentUser ? ' (You)' : ''}</span>
-                        <span class="score">${entry.totalScore.toLocaleString()} pts</span>
-                        <span class="games">${gamesPlayed} games</span>
-                        <span class="date">${lastGameDate}</span>
-                    </div>
-                `;
-            });
-            
-            // Add message if no entries
-            if (globalLeaderboard.length === 0) {
-                html = '<div class="leaderboard-entry">No players yet. Be the first to pay and play!</div>';
-            }
-            
-            if (leaderboardElement) {
-                leaderboardElement.innerHTML = html;
-            }
-            
-            if (leaderboardContent) {
-                leaderboardContent.innerHTML = html;
-            }
-            
-        } catch (error) {
-            console.error('Error loading global leaderboard:', error);
-            
-            // Fallback message
-            const fallbackHtml = '<div class="leaderboard-entry">Error loading leaderboard. Please try again.</div>';
-            
-            if (leaderboardElement) {
-                leaderboardElement.innerHTML = fallbackHtml;
-            }
-            
-            if (leaderboardContent) {
-                leaderboardContent.innerHTML = fallbackHtml;
-            }
-        }
-    }
-    
-    async loadBlockchainLeaderboard() {
-        if (window.web3Manager && window.web3Manager.leaderboardContract) {
-            try {
-                const blockchainLeaderboard = await window.web3Manager.getBlockchainLeaderboard();
-                if (blockchainLeaderboard.length > 0) {
-                    // Merge blockchain data with local data
-                    blockchainLeaderboard.forEach(entry => {
-                        const existingIndex = this.leaderboard.findIndex(localEntry => localEntry.address === entry.address);
-                        if (existingIndex === -1) {
-                            this.leaderboard.push(entry);
-                        } else if (entry.score > this.leaderboard[existingIndex].score) {
-                            this.leaderboard[existingIndex] = entry;
-                        }
-                    });
-                    
-                    this.leaderboard.sort((a, b) => b.score - a.score);
-                    this.saveLeaderboard();
-                    this.updateLeaderboardDisplay();
-                }
-            } catch (error) {
-                console.error('Error loading blockchain leaderboard:', error);
-            }
-        }
-    }
-    
-    getFromPool(poolName, ...args) {
-        const pool = this.objectPools[poolName];
-        if (pool.length > 0) {
-            const obj = pool.pop();
-            obj.reset(...args);
-            return obj;
-        }
-        // Fallback if pool is empty
-        switch (poolName) {
-            case 'bullets': return new Bullet(...args);
-            case 'enemies': return new Enemy(...args);
-            case 'particles': return new Particle(...args);
-        }
-    }
-    
-    returnToPool(poolName, obj) {
-        this.objectPools[poolName].push(obj);
     }
     
     loadAssets() {
@@ -338,7 +158,17 @@ class SpaceHooligans {
     async gameOver() {
         // Update global leaderboard with current score
         if (window.web3Manager && window.web3Manager.address) {
-            await updateGlobalScore(this.score);
+            console.log('🎮 Game Over - Updating score:', this.score);
+            
+            // Update real score in JSONBin.io database
+            try {
+                await window.web3Manager.updatePlayerScore(this.score);
+                console.log('✅ Score updated successfully to JSONBin.io');
+            } catch (error) {
+                console.error('❌ Failed to update score to JSONBin.io:', error);
+            }
+        } else {
+            console.log('⚠️ No web3Manager or address available for score update');
         }
         
         // Check if this is a new high score
@@ -420,8 +250,6 @@ class SpaceHooligans {
             intensityElement.textContent = this.intensityMultiplier.toFixed(1) + 'x';
         }
     }
-    
-
     
     shoot() {
         if (this.gameObjects.bullets.length >= this.maxBullets) return;
@@ -601,6 +429,177 @@ class SpaceHooligans {
         
         requestAnimationFrame((time) => this.gameLoop(time));
     }
+    
+    getFromPool(poolName, ...args) {
+        const pool = this.objectPools[poolName];
+        if (pool.length > 0) {
+            const obj = pool.pop();
+            obj.reset(...args);
+            return obj;
+        }
+        // Fallback if pool is empty
+        switch (poolName) {
+            case 'bullets': return new Bullet(...args);
+            case 'enemies': return new Enemy(...args);
+            case 'particles': return new Particle(...args);
+        }
+    }
+    
+    returnToPool(poolName, obj) {
+        this.objectPools[poolName].push(obj);
+    }
+    
+    async updateLeaderboardDisplay() {
+        const leaderboardElement = document.getElementById('leaderboard');
+        const leaderboardContent = document.getElementById('leaderboardContent');
+        
+        if (!leaderboardElement && !leaderboardContent) {
+            console.log('Leaderboard elements not found');
+            return;
+        }
+        
+        try {
+            console.log('🔄 Loading leaderboard data...');
+            
+            // Load global leaderboard from API
+            const globalLeaderboard = await loadGlobalLeaderboard();
+            
+            console.log('📊 Leaderboard data received:', {
+                totalEntries: globalLeaderboard.length,
+                entries: globalLeaderboard.map(entry => ({
+                    address: entry.address.substring(0, 6) + '...' + entry.address.substring(38),
+                    totalScore: entry.totalScore,
+                    gamesPlayed: entry.gamesPlayed
+                }))
+            });
+            
+            let html = '';
+            
+            // Add countdown timer if available
+            if (window.web3Manager) {
+                try {
+                    const metadata = await window.web3Manager.getLeaderboardMetadata();
+                    const countdown = await window.web3Manager.getLeaderboardCountdown();
+                    console.log('📈 Leaderboard countdown:', countdown);
+                    
+                    if (countdown) {
+                        const daysSinceReset = countdown.daysSinceReset;
+                        const daysUntilReset = countdown.daysUntilReset;
+                        
+                        // Format countdown display
+                        let countdownText = '';
+                        if (countdown.days > 0) {
+                            countdownText = `${countdown.days}d ${countdown.hours}h ${countdown.minutes}m`;
+                        } else if (countdown.hours > 0) {
+                            countdownText = `${countdown.hours}h ${countdown.minutes}m ${countdown.seconds}s`;
+                        } else if (countdown.minutes > 0) {
+                            countdownText = `${countdown.minutes}m ${countdown.seconds}s`;
+                        } else {
+                            countdownText = `${countdown.seconds}s`;
+                        }
+                        
+                        html += `
+                            <div style="text-align: center; margin-bottom: 15px; padding: 10px; background: rgba(76, 175, 80, 0.1); border-radius: 5px;">
+                                <div style="color: #4CAF50; font-size: 12px; margin-bottom: 5px;">
+                                    SEASON #${(metadata.resetCount || 1)} LIVE NOW (${daysSinceReset.toFixed(0)} days in)
+                                </div>
+                                <div style="color: #FFD700; font-size: 11px;">
+                                    Next reset in ${countdownText}
+                                </div>
+                            </div>
+                        `;
+                        console.log('✅ Countdown timer added to leaderboard');
+                    } else {
+                        console.log('⚠️ Countdown is null, showing fallback');
+                        // Fallback countdown display
+                        html += `
+                            <div style="text-align: center; margin-bottom: 15px; padding: 10px; background: rgba(76, 175, 80, 0.1); border-radius: 5px;">
+                                <div style="color: #4CAF50; font-size: 12px; margin-bottom: 5px;">
+                                    SEASON #${(metadata.resetCount || 1)} LIVE NOW (0 days in)
+                                </div>
+                                <div style="color: #FFD700; font-size: 11px;">
+                                    Next reset in 99d 23h 59m
+                                </div>
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    console.error('❌ Error getting countdown:', error);
+                    // Fallback countdown display on error
+                    html += `
+                        <div style="text-align: center; margin-bottom: 15px; padding: 10px; background: rgba(76, 175, 80, 0.1); border-radius: 5px;">
+                            <div style="color: #4CAF50; font-size: 12px; margin-bottom: 5px;">
+                                SEASON #${(metadata.resetCount || 1)} LIVE NOW (0 days in)
+                            </div>
+                            <div style="color: #FFD700; font-size: 11px;">
+                                Next reset in 99d 23h 59m
+                            </div>
+                        </div>
+                    `;
+                }
+            } else {
+                console.log('⚠️ web3Manager not available for countdown');
+            }
+            
+            // Get current user's address for highlighting
+            const currentUserAddress = window.web3Manager ? window.web3Manager.address : null;
+            
+            // Sort by total score (highest first)
+            globalLeaderboard.sort((a, b) => b.totalScore - a.totalScore);
+            
+            // Show all players
+            globalLeaderboard.forEach((entry, index) => {
+                const shortAddress = entry.address.substring(0, 6) + '...' + entry.address.substring(38);
+                const lastGameDate = entry.lastGameDate ? new Date(entry.lastGameDate).toLocaleDateString() : 'Never';
+                const rank = entry.rank || (index + 1);
+                const gamesPlayed = entry.gamesPlayed || 0;
+                
+                // Highlight current user's entry
+                const isCurrentUser = currentUserAddress && entry.address.toLowerCase() === currentUserAddress.toLowerCase();
+                const highlightClass = isCurrentUser ? 'current-user' : '';
+                
+                html += `
+                    <div class="leaderboard-entry ${highlightClass}">
+                        <span class="rank">${rank}.</span>
+                        <span class="address">${shortAddress}${isCurrentUser ? ' (You)' : ''}</span>
+                        <span class="score">${entry.totalScore.toLocaleString()} pts</span>
+                        <span class="games">${gamesPlayed} games</span>
+                        <span class="date">${lastGameDate}</span>
+                    </div>
+                `;
+            });
+            
+            // Add message if no entries
+            if (globalLeaderboard.length === 0) {
+                html += '<div class="leaderboard-entry">No players yet. Be the first to pay and play!</div>';
+                console.log('⚠️ No leaderboard entries found');
+            } else {
+                console.log('✅ Leaderboard populated with', globalLeaderboard.length, 'entries');
+            }
+            
+            if (leaderboardElement) {
+                leaderboardElement.innerHTML = html;
+            }
+            
+            if (leaderboardContent) {
+                leaderboardContent.innerHTML = html;
+            }
+            
+        } catch (error) {
+            console.error('Error loading global leaderboard:', error);
+            
+            // Fallback message
+            const fallbackHtml = '<div class="leaderboard-entry">Error loading leaderboard. Please try again.</div>';
+            
+            if (leaderboardElement) {
+                leaderboardElement.innerHTML = fallbackHtml;
+            }
+            
+            if (leaderboardContent) {
+                leaderboardContent.innerHTML = fallbackHtml;
+            }
+        }
+    }
 }
 
 // Optimized Game Objects with object pooling support
@@ -779,6 +778,20 @@ function continueGame() {
 
 function showLeaderboard() {
     document.getElementById('leaderboardOverlay').classList.remove('hidden');
+    // Hide other overlays
+    document.getElementById('gameOverOverlay').classList.add('hidden');
+    document.getElementById('menuOverlay').classList.add('hidden');
+    document.getElementById('walletScreen').classList.add('hidden');
+    // Load and display global leaderboard
+    if (window.game) {
+        window.game.updateLeaderboardDisplay();
+    }
+}
+
+function showLeaderboardFromWallet() {
+    document.getElementById('leaderboardOverlay').classList.remove('hidden');
+    // Hide wallet screen
+    document.getElementById('walletScreen').classList.add('hidden');
     // Load and display global leaderboard
     if (window.game) {
         window.game.updateLeaderboardDisplay();
@@ -787,11 +800,15 @@ function showLeaderboard() {
 
 function hideLeaderboard() {
     document.getElementById('leaderboardOverlay').classList.add('hidden');
-    // Return to game over screen if we came from there
+    // Return to appropriate screen based on game state
     if (window.game && window.game.state === 'gameOver') {
         document.getElementById('gameOverOverlay').classList.remove('hidden');
-    } else {
+    } else if (window.web3Manager && window.web3Manager.address) {
+        // If wallet is connected, show menu
         document.getElementById('menuOverlay').classList.remove('hidden');
+    } else {
+        // Otherwise show wallet screen
+        document.getElementById('walletScreen').classList.remove('hidden');
     }
 }
 
