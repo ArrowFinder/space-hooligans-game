@@ -257,6 +257,11 @@ class Web3Manager {
             await this.getKarratBalance();
             console.log('Balance fetched:', this.karratBalance);
             
+            // Clear any existing payment state for fresh connection
+            console.log('Clearing any existing payment state...');
+            this.hasPaid = false;
+            localStorage.removeItem('spaceHooligans_payment');
+            
             // Update UI to connected state
             console.log('Updating UI to connected state...');
             this.updateUIState('connected');
@@ -796,6 +801,18 @@ async function updateGlobalScore(score) {
     if (window.web3Manager) {
         await window.web3Manager.updatePlayerScore(score);
     }
+}
+
+// Manual clear function for debugging
+function clearAllGameData() {
+    console.log('Clearing all game data...');
+    localStorage.removeItem('spaceHooligans_payment');
+    localStorage.removeItem('spaceHooligans_stats');
+    if (window.web3Manager) {
+        window.web3Manager.hasPaid = false;
+        window.web3Manager.disconnectWallet();
+    }
+    console.log('All game data cleared. Refresh the page.');
 }
 
 // Global Web3 manager instance
