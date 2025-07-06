@@ -275,7 +275,7 @@ class Web3Manager {
             
             // Show the payment screen after successful connection
             console.log('Showing payment screen...');
-            showMenu();
+            showWalletScreen();
             console.log('Payment screen shown');
         } catch (error) {
             console.error('Error setting up wallet info:', error);
