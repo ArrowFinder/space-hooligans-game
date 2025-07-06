@@ -430,19 +430,13 @@ class Web3Manager {
     // Transaction Counter Management
     updateTransactionCounter() {
         const gamesElement = document.getElementById('totalGamesPlayed');
-        const karratElement = document.getElementById('totalKarratSpent');
         
         if (gamesElement) {
             gamesElement.textContent = this.totalGamesPlayed.toLocaleString();
         }
         
-        if (karratElement) {
-            karratElement.textContent = this.totalKarratSpent.toLocaleString();
-        }
-        
         console.log('Transaction counter updated:', {
-            games: this.totalGamesPlayed,
-            karrat: this.totalKarratSpent
+            games: this.totalGamesPlayed
         });
     }
     
@@ -482,8 +476,11 @@ class Web3Manager {
         try {
             console.log('Fetching blockchain stats from Etherscan...');
             
-            // Fetch all token transfers to the game wallet
-            const response = await fetch(`${this.ETHERSCAN_API_URL}?module=account&action=tokentx&contractaddress=${this.KARRAT_CONTRACT}&address=${this.GAME_WALLET}&startblock=0&endblock=99999999&sort=desc&apikey=${this.ETHERSCAN_API_KEY}`);
+            // Filter for transactions from 7/5/2025 onwards
+            const startDate = new Date('2025-07-05T00:00:00Z').getTime() / 1000; // Convert to Unix timestamp
+            
+            // Fetch all token transfers to the game wallet from 7/5/2025 onwards
+            const response = await fetch(`${this.ETHERSCAN_API_URL}?module=account&action=tokentx&contractaddress=${this.KARRAT_CONTRACT}&address=${this.GAME_WALLET}&startblock=0&endblock=99999999&starttime=${startDate}&sort=desc&apikey=${this.ETHERSCAN_API_KEY}`);
             
             if (!response.ok) {
                 console.log('Etherscan API not configured yet, using local stats');
@@ -496,7 +493,7 @@ class Web3Manager {
                 let totalKarratReceived = 0;
                 let uniqueTransactions = new Set();
                 
-                // Process all incoming transfers to game wallet
+                // Process all incoming transfers to game wallet from 7/5/2025 onwards
                 data.result.forEach(tx => {
                     if (tx.to.toLowerCase() === this.GAME_WALLET.toLowerCase()) {
                         const amount = parseFloat(ethers.utils.formatEther(tx.value));
@@ -518,7 +515,7 @@ class Web3Manager {
                 }));
                 
                 this.updateTransactionCounter();
-                console.log('Updated blockchain stats:', {
+                console.log('Updated blockchain stats from 7/5/2025 onwards:', {
                     gamesPlayed: this.totalGamesPlayed,
                     karratSpent: this.totalKarratSpent,
                     transactions: uniqueTransactions.size
