@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space Hooligans - Web3 Arcade</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+            font-family: 'Press Start 2P', cursive;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: white;
+        }
+
+        .game-title {
+            font-size: 48px;
+            text-align: center;
+            margin-bottom: 30px;
+            text-shadow: 
+                0 0 10px #4CAF50,
+                0 0 20px #4CAF50,
+                0 0 30px #4CAF50;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            from { text-shadow: 0 0 10px #4CAF50, 0 0 20px #4CAF50, 0 0 30px #4CAF50; }
+            to { text-shadow: 0 0 20px #4CAF50, 0 0 30px #4CAF50, 0 0 40px #4CAF50; }
+        }
+
+        .game-container {
+            position: relative;
+            border: 3px solid #4CAF50;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(76, 175, 80, 0.3);
+        }
+
+        canvas {
+            display: block;
+            background: #000;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .modal {
+            background: rgba(26, 26, 46, 0.95);
+            border: 2px solid #4CAF50;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 0 30px rgba(76, 175, 80, 0.3);
+        }
+
+        .modal h2 {
+            color: #4CAF50;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+
+        .modal p {
+            margin: 15px 0;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .wallet-info {
+            background: rgba(76, 175, 80, 0.1);
+            border: 1px solid #4CAF50;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .token-balance {
+            color: #4CAF50;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+
+        .button {
+            background: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 30px;
+            font-size: 14px;
+            font-family: 'Press Start 2P', cursive;
+            cursor: pointer;
+            border-radius: 8px;
+            margin: 10px;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        .button:hover {
+            background: #45a049;
+            transform: scale(1.05);
+            box-shadow: 0 0 15px #4CAF50;
+        }
+
+        .button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .payment-button {
+            background: #FF6B35;
+            font-size: 16px;
+            padding: 20px 40px;
+        }
+
+        .payment-button:hover {
+            background: #E55A2B;
+        }
+
+        .metamask-button {
+            background: #F6851B;
+            font-size: 16px;
+            padding: 20px 40px;
+            border: 2px solid #F6851B;
+        }
+
+        .metamask-button:hover {
+            background: #E67E22;
+            border-color: #E67E22;
+        }
+
+        .metamask-button img {
+            width: 24px;
+            height: 24px;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        .score-display {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 18px;
+            color: #4CAF50;
+            text-shadow: 0 0 10px #4CAF50;
+        }
+        
+        .lives-display {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 18px;
+            color: #FF6B35;
+            text-shadow: 0 0 10px #FF6B35;
+        }
+        
+        .intensity-display {
+            position: absolute;
+            top: 60px;
+            right: 20px;
+            font-size: 16px;
+            color: #FFD700;
+            text-shadow: 0 0 10px #FFD700;
+        }
+        
+        .leaderboard {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #4CAF50;
+            border-radius: 10px;
+            padding: 15px;
+            max-width: 300px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+        
+        .leaderboard h3 {
+            color: #4CAF50;
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            text-align: center;
+        }
+        
+        .leaderboard-entry {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 5px 0;
+            padding: 5px;
+            background: rgba(76, 175, 80, 0.1);
+            border-radius: 5px;
+        }
+        
+        .leaderboard-entry .rank {
+            font-weight: bold;
+            color: #FFD700;
+            min-width: 30px;
+        }
+        
+        .leaderboard-entry .address {
+            color: #4CAF50;
+            flex: 1;
+            margin: 0 10px;
+        }
+        
+        .leaderboard-entry .score {
+            color: #FF6B35;
+            font-weight: bold;
+        }
+        
+        .leaderboard-entry .games {
+            color: #4CAF50;
+            font-size: 11px;
+            margin: 0 10px;
+        }
+        
+        .leaderboard-entry .date {
+            color: #888;
+            font-size: 10px;
+            margin-left: 10px;
+        }
+        
+        #leaderboardContent {
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 20px 0;
+        }
+        
+        #leaderboardContent .leaderboard-entry {
+            margin: 8px 0;
+            padding: 8px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .error-message {
+            color: #FF6B6B;
+            background: rgba(255, 107, 107, 0.1);
+            border: 1px solid #FF6B6B;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            font-size: 12px;
+        }
+
+        .success-message {
+            color: #4CAF50;
+            background: rgba(76, 175, 80, 0.1);
+            border: 1px solid #4CAF50;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            font-size: 12px;
+        }
+        
+
+    </style>
+</head>
+<body>
+    <h1 class="game-title">SPACE HOOLIGANS</h1>
+    
+    <div class="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        
+        <div class="score-display" id="scoreDisplay" style="display: none;">
+            Score: <span id="scoreValue">0</span>
+        </div>
+        
+        <div class="lives-display" id="livesDisplay" style="display: none;">
+            Lives: <span id="livesValue">5</span>
+        </div>
+        
+        <div class="intensity-display" id="intensityDisplay" style="display: none;">
+            Intensity: <span id="intensityValue">1.0x</span>
+        </div>
+        
+        <div class="leaderboard" id="leaderboard" style="display: none;"></div>
+
+        <!-- Wallet Connection Screen -->
+        <div class="overlay" id="walletOverlay">
+            <div class="modal">
+                <h2>Connect MetaMask to Play</h2>
+                <p>This arcade requires 1 $KARRAT to play</p>
+                <p>Please ensure MetaMask is installed and unlocked</p>
+                
+                <button class="button metamask-button" onclick="connectMetaMask()">
+                    <img src="https://cdn.iconscout.com/icon/free/png-256/metamask-2728406-2261817.png" alt="MetaMask">
+                    Connect MetaMask
+                </button>
+
+                <div id="errorMessage" class="error-message" style="display: none;"></div>
+                <div id="successMessage" class="success-message" style="display: none;"></div>
+
+                <div class="wallet-info" id="walletInfo">
+                    <p>Connected: <span id="walletAddress">...</span></p>
+                    <p class="token-balance">$KARRAT Balance: <span id="karratBalance">0</span></p>
+                    <button class="button" onclick="refreshBalance()" style="background: #666; margin: 5px;">Refresh Balance</button>
+                    <button class="button payment-button" onclick="payToPlay()" id="payButton">
+                        Pay 1 $KARRAT to Play
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Menu Screen -->
+        <div class="overlay hidden" id="menuOverlay">
+            <div class="modal">
+                <h2>Space Hooligans</h2>
+                <p>Ready to play?</p>
+                <button class="button" onclick="startGame()">Start Game</button>
+                <button class="button" onclick="disconnectWallet()">Disconnect Wallet</button>
+            </div>
+        </div>
+
+        <!-- Life Lost Screen -->
+        <div class="overlay hidden" id="lifeLostOverlay">
+            <div class="modal">
+                <h2>Life Lost!</h2>
+                <p class="token-balance">Lives Remaining: <span id="livesRemaining">4</span></p>
+                <button class="button" onclick="continueGame()">Continue Game</button>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div class="overlay hidden" id="gameOverOverlay">
+            <div class="modal">
+                <h2>Game Over!</h2>
+                <p class="token-balance">Final Score: <span id="finalScore">0</span></p>
+                <p class="token-balance">High Score: <span id="highScore">0</span></p>
+                <button class="button payment-button" onclick="payToPlay()">Pay 1 $KARRAT for 5 More Lives</button>
+                <button class="button" onclick="showLeaderboard()">Leaderboard</button>
+            </div>
+        </div>
+
+        <!-- Leaderboard Screen -->
+        <div class="overlay hidden" id="leaderboardOverlay">
+            <div class="modal">
+                <h2>Leaderboard</h2>
+                <div id="leaderboardContent"></div>
+                <button class="button" onclick="hideLeaderboard()">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Web3 Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <script src="web3.js"></script>
+    <script src="game.js"></script>
+</body>
+</html> 
