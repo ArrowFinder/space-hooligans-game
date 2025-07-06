@@ -310,13 +310,13 @@
         <div class="leaderboard" id="leaderboard" style="display: none;"></div>
 
         <!-- Wallet Connection Screen -->
-        <div class="overlay" id="walletOverlay">
+        <div class="overlay" id="walletScreen">
             <div class="modal">
                 <h2>Connect MetaMask to Play</h2>
                 <p>This arcade requires 1 $KARRAT to play</p>
                 <p>Please ensure MetaMask is installed and unlocked</p>
                 
-                <button class="button metamask-button" onclick="connectMetaMask()">
+                <button class="button metamask-button" id="connectWalletBtn" onclick="connectMetaMask()">
                     <img src="https://cdn.iconscout.com/icon/free/png-256/metamask-2728406-2261817.png" alt="MetaMask">
                     Connect MetaMask
                 </button>
@@ -328,7 +328,7 @@
                     <p>Connected: <span id="walletAddress">...</span></p>
                     <p class="token-balance">$KARRAT Balance: <span id="karratBalance">0</span></p>
                     <button class="button" onclick="refreshBalance()" style="background: #666; margin: 5px;">Refresh Balance</button>
-                    <button class="button payment-button" onclick="payToPlay()" id="payButton">
+                    <button class="button payment-button" onclick="payToPlay()" id="payToPlayBtn">
                         Pay 1 $KARRAT to Play
                     </button>
                 </div>
