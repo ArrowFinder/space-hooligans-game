@@ -13,7 +13,7 @@ class Web3Manager {
         
         // Contract configuration - using correct checksummed address
         this.KARRAT_CONTRACT = '0xAcd2c239012D17BEB128B0944D49015104113650';
-        this.GAME_WALLET = '0x8379AE5b257C4F20a502881f70A08C40ed1305A0'; // Game wallet to receive payments
+        this.GAME_WALLET = '0x452161Fd28713878D84838c5Cc5b41Faf46d710A'; // Game wallet to receive payments
         
         // Leaderboard contract (will be deployed)
         this.LEADERBOARD_CONTRACT = '0x0000000000000000000000000000000000000000'; // Placeholder - will be updated after deployment
@@ -337,10 +337,22 @@ class Web3Manager {
         return 0;
     }
     
-    async payToPlay() {
+    async payToPlay(tier = 1) {
         if (this.paymentInProgress) {
             console.log('Payment already in progress');
             return;
+        }
+        
+        // Define payment tiers
+        const paymentTiers = {
+            1: { amount: 2, lives: 3, name: 'Starter' },
+            2: { amount: 5, lives: 8, name: 'Pro' },
+            3: { amount: 10, lives: 20, name: 'Elite' }
+        };
+        
+        const selectedTier = paymentTiers[tier];
+        if (!selectedTier) {
+            throw new Error('Invalid payment tier selected');
         }
         
         this.paymentInProgress = true;
@@ -352,17 +364,19 @@ class Web3Manager {
                 throw new Error('Please connect your MetaMask wallet first.');
             }
             
-            if (this.karratBalance < 1) {
-                throw new Error(`Insufficient $KARRAT balance. You have ${this.karratBalance.toFixed(2)} $KARRAT, but need 1 $KARRAT to play.`);
+            if (this.karratBalance < selectedTier.amount) {
+                throw new Error(`Insufficient $KARRAT balance. You have ${this.karratBalance.toFixed(2)} $KARRAT, but need ${selectedTier.amount} $KARRAT for the ${selectedTier.name} tier.`);
             }
             
-            // Transfer 1 $KARRAT to game wallet
-            const amount = ethers.utils.parseEther('1');
+            // Transfer KARRAT to game wallet
+            const amount = ethers.utils.parseEther(selectedTier.amount.toString());
             
             console.log('PAYMENT VERIFICATION:', {
                 from: this.address,
                 to: this.GAME_WALLET,
-                amount: '1 $KARRAT',
+                amount: `${selectedTier.amount} $KARRAT`,
+                lives: selectedTier.lives,
+                tier: selectedTier.name,
                 amountWei: amount.toString(),
                 contractAddress: this.KARRAT_CONTRACT
             });
@@ -376,7 +390,7 @@ class Web3Manager {
                 gasPrice: tx.gasPrice.toString()
             });
             
-            this.showSuccess('Payment transaction submitted! Waiting for confirmation...');
+            this.showSuccess(`Payment transaction submitted! Waiting for confirmation...`);
             
             // Wait for transaction confirmation
             const receipt = await tx.wait();
@@ -394,27 +408,41 @@ class Web3Manager {
                 await this.verifyPaymentReceived(receipt.transactionHash);
                 
                 // Increment transaction counter
-                this.incrementTransactionCounter();
+                this.incrementTransactionCounter(selectedTier.amount);
                 
                 this.hasPaid = true;
                 
-                // Save payment state to localStorage
+                // Save payment state to localStorage with tier information
                 localStorage.setItem('spaceHooligans_payment', JSON.stringify({
                     address: this.address,
                     timestamp: Date.now(),
-                    txHash: receipt.transactionHash
+                    txHash: receipt.transactionHash,
+                    tier: tier,
+                    lives: selectedTier.lives,
+                    amount: selectedTier.amount
                 }));
                 
                 // Add player to global leaderboard when they pay
                 await this.addPlayerToGlobalLeaderboard();
                 
-                this.showSuccess('Payment successful! You have 5 more lives!');
+                this.showSuccess(`Payment successful! You have ${selectedTier.lives} lives with the ${selectedTier.name} tier!`);
                 
                 // Update balance
                 await this.getKarratBalance();
                 
-                // Show game menu
+                // Show game menu with additional logging
+                console.log('Payment successful - showing game menu...');
+                
+                // Explicitly hide game over screen first
+                const gameOverElement = document.getElementById('gameOverOverlay');
+                if (gameOverElement) {
+                    gameOverElement.classList.add('hidden');
+                    gameOverElement.style.display = 'none';
+                    console.log('Game over screen explicitly hidden');
+                }
+                
                 showMenu();
+                console.log('showMenu() called - menu should now be visible');
             } else {
                 throw new Error('Transaction failed. Please try again.');
             }
@@ -440,9 +468,9 @@ class Web3Manager {
         });
     }
     
-    incrementTransactionCounter() {
+    incrementTransactionCounter(amount) {
         this.totalGamesPlayed += 1;
-        this.totalKarratSpent += 1;
+        this.totalKarratSpent += amount;
         this.updateTransactionCounter();
         
         // Save to localStorage for persistence
@@ -1156,9 +1184,9 @@ function refreshBalance() {
     }
 }
 
-function payToPlay() {
+function payToPlay(tier = 1) {
     if (window.web3Manager) {
-        window.web3Manager.payToPlay();
+        window.web3Manager.payToPlay(tier);
     }
 }
 
@@ -1192,12 +1220,98 @@ function showWalletScreen() {
 }
 
 function showMenu() {
-    document.getElementById('walletScreen').classList.add('hidden');
-    document.getElementById('menuOverlay').classList.remove('hidden');
+    console.log('showMenu() called - starting menu display process...');
+    
+    // Force hide all other screens with multiple approaches
+    const screens = [
+        'walletScreen',
+        'gameOverOverlay', 
+        'lifeLostOverlay',
+        'leaderboardOverlay'
+    ];
+    
+    screens.forEach(screenId => {
+        const element = document.getElementById(screenId);
+        if (element) {
+            element.classList.add('hidden');
+            element.style.display = 'none'; // Force hide with CSS
+            console.log(`Hidden ${screenId}`);
+        }
+    });
+    
+    // Add a small delay to ensure UI updates properly
+    setTimeout(() => {
+        // Show the menu
+        const menuElement = document.getElementById('menuOverlay');
+        if (menuElement) {
+            menuElement.classList.remove('hidden');
+            menuElement.style.display = 'flex'; // Force show with CSS
+            console.log('Menu shown - all other screens hidden');
+        } else {
+            console.error('Menu overlay element not found!');
+        }
+    }, 150); // Increased delay for better reliability
 }
 
 function showGameOver() {
-    document.getElementById('gameOverOverlay').classList.remove('hidden');
+    console.log('showGameOver() called - displaying game over screen');
+    
+    // Hide all other overlays first
+    const overlays = ['menuOverlay', 'walletScreen', 'lifeLostOverlay', 'leaderboardOverlay'];
+    overlays.forEach(overlayId => {
+        const element = document.getElementById(overlayId);
+        if (element) {
+            element.classList.add('hidden');
+            element.style.display = 'none';
+            console.log(`Hidden ${overlayId}`);
+        } else {
+            console.error(`${overlayId} element not found!`);
+        }
+    });
+    
+    // Show game over overlay with enhanced debugging
+    const gameOverElement = document.getElementById('gameOverOverlay');
+    console.log('Game over element found:', !!gameOverElement);
+    
+    if (gameOverElement) {
+        // Force remove hidden class and set display
+        gameOverElement.classList.remove('hidden');
+        gameOverElement.style.display = 'flex';
+        gameOverElement.style.zIndex = '1000';
+        gameOverElement.style.visibility = 'visible';
+        gameOverElement.style.opacity = '1';
+        
+        console.log('Game over overlay display properties:', {
+            display: gameOverElement.style.display,
+            zIndex: gameOverElement.style.zIndex,
+            visibility: gameOverElement.style.visibility,
+            opacity: gameOverElement.style.opacity,
+            hiddenClass: gameOverElement.classList.contains('hidden')
+        });
+        
+        // Verify the overlay is actually visible
+        setTimeout(() => {
+            const rect = gameOverElement.getBoundingClientRect();
+            console.log('Game over overlay visibility check:', {
+                width: rect.width,
+                height: rect.height,
+                top: rect.top,
+                left: rect.left,
+                visible: rect.width > 0 && rect.height > 0
+            });
+        }, 50);
+        
+        console.log('Game over overlay displayed successfully');
+    } else {
+        console.error('Game over overlay element not found!');
+        
+        // Try to find any overlay elements for debugging
+        const allOverlays = document.querySelectorAll('.overlay');
+        console.log('All overlay elements found:', allOverlays.length);
+        allOverlays.forEach((overlay, index) => {
+            console.log(`Overlay ${index}:`, overlay.id, overlay.className);
+        });
+    }
 }
 
 // Global functions for leaderboard

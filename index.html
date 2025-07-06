@@ -305,6 +305,17 @@
             margin: 0;
         }
         
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .life-lost-highlight {
+            animation: pulse 0.5s ease-in-out;
+            background: rgba(255, 107, 53, 0.1) !important;
+            border: 2px solid #FF6B35 !important;
+        }
 
     </style>
 </head>
@@ -336,10 +347,6 @@
         <!-- Wallet Connection Screen -->
         <div class="overlay" id="walletScreen">
             <div class="modal">
-                <h2>Connect MetaMask to Play</h2>
-                <p>This arcade requires 1 $KARRAT to play</p>
-                <p>Please ensure MetaMask is installed and unlocked</p>
-                
                 <button class="button metamask-button" id="connectWalletBtn" onclick="connectMetaMask()">
                     <img src="https://cdn.iconscout.com/icon/free/png-256/metamask-2728406-2261817.png" alt="MetaMask">
                     Connect MetaMask
@@ -350,7 +357,7 @@
                 </button>
 
                 <button class="button" onclick="window.open('about.html', '_blank')" style="background: #FF6B35; margin-top: 10px;">
-                    About
+                    REWARDS
                 </button>
 
                 <div id="errorMessage" class="error-message" style="display: none;"></div>
@@ -360,9 +367,24 @@
                     <p>Connected: <span id="walletAddress">...</span></p>
                     <p class="token-balance">$KARRAT Balance: <span id="karratBalance">0</span></p>
                     <button class="button" onclick="refreshBalance()" style="background: #666; margin: 5px;">Refresh Balance</button>
-                    <button class="button payment-button" onclick="payToPlay()" id="payToPlayBtn">
-                        Pay 1 $KARRAT to Play
-                    </button>
+                    
+                    <div style="margin: 20px 0;">
+                        <h3 style="color: #4CAF50; margin-bottom: 15px; font-size: 16px;">Choose Your Tier:</h3>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <button class="button payment-button" onclick="payToPlay(1)" style="background: #4CAF50; font-size: 14px; padding: 15px 20px;">
+                                Starter: 2 $KARRAT - 3 Lives
+                            </button>
+                            
+                            <button class="button payment-button" onclick="payToPlay(2)" style="background: #FF6B35; font-size: 14px; padding: 15px 20px;">
+                                Pro: 5 $KARRAT - 8 Lives
+                            </button>
+                            
+                            <button class="button payment-button" onclick="payToPlay(3)" style="background: #FFD700; color: #000; font-size: 14px; padding: 15px 20px;">
+                                Elite: 10 $KARRAT - 20 Lives
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -373,16 +395,18 @@
                 <h2>Space Hooligans</h2>
                 <p>Ready to play?</p>
                 <button class="button" onclick="startGame()">Start Game</button>
-                <button class="button" onclick="window.open('about.html', '_blank')" style="background: #FF6B35;">About</button>
+                <button class="button" onclick="window.open('about.html', '_blank')" style="background: #FF6B35;">REWARDS</button>
             </div>
         </div>
 
         <!-- Life Lost Screen -->
         <div class="overlay hidden" id="lifeLostOverlay">
             <div class="modal">
-                <h2>Life Lost!</h2>
-                <p class="token-balance">Lives Remaining: <span id="livesRemaining">4</span></p>
-                <button class="button" onclick="continueGame()">Continue Game</button>
+                <h2 style="color: #FF6B35; text-shadow: 0 0 10px #FF6B35;">You Died Sucka!</h2>
+                <p class="token-balance">Lives Remaining: <span id="livesRemaining" style="color: #4CAF50; font-weight: bold; font-size: 18px;">4</span></p>
+                <div style="text-align: center; margin-top: 20px;">
+                    <button class="button" onclick="continueGame()" style="background: #4CAF50; color: white; font-weight: bold; font-size: 16px; padding: 15px 30px; border: 2px solid #45a049; box-shadow: 0 0 15px rgba(76, 175, 80, 0.5);">Continue Game</button>
+                </div>
             </div>
         </div>
 
@@ -392,7 +416,25 @@
                 <h2>Game Over!</h2>
                 <p class="token-balance">Final Score: <span id="finalScore">0</span></p>
                 <p class="token-balance">High Score: <span id="highScore">0</span></p>
-                <button class="button payment-button" onclick="payToPlay()">Pay 1 $KARRAT for 5 More Lives</button>
+                
+                <div style="margin: 20px 0;">
+                    <h3 style="color: #4CAF50; margin-bottom: 15px; font-size: 16px;">Get More Lives:</h3>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <button class="button payment-button" onclick="payToPlay(1)" style="background: #4CAF50; font-size: 14px; padding: 15px 20px;">
+                            Starter: 2 $KARRAT - 3 Lives
+                        </button>
+                        
+                        <button class="button payment-button" onclick="payToPlay(2)" style="background: #FF6B35; font-size: 14px; padding: 15px 20px;">
+                            Pro: 5 $KARRAT - 8 Lives
+                        </button>
+                        
+                        <button class="button payment-button" onclick="payToPlay(3)" style="background: #FFD700; color: #000; font-size: 14px; padding: 15px 20px;">
+                            Elite: 10 $KARRAT - 20 Lives
+                        </button>
+                    </div>
+                </div>
+                
                 <button class="button" onclick="showLeaderboard()">Leaderboard</button>
             </div>
         </div>

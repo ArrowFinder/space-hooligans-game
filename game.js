@@ -38,6 +38,8 @@ class SpaceHooligans {
         this.mouseY = 0;
         this.keys = {};
         this.invincible = false;
+        this.invincibilityStartTime = null;
+        this.invincibilityTimer = null;
         
         // Performance settings
         this.maxBullets = 5;
@@ -100,6 +102,19 @@ class SpaceHooligans {
         this.gameLoop();
     }
     
+    getLivesFromPayment() {
+        try {
+            const savedPayment = localStorage.getItem('spaceHooligans_payment');
+            if (savedPayment) {
+                const paymentData = JSON.parse(savedPayment);
+                return paymentData.lives || 5; // Default to 5 if not specified
+            }
+        } catch (error) {
+            console.error('Error reading payment data:', error);
+        }
+        return 5; // Default fallback
+    }
+    
     startGame() {
         if (!window.web3Manager) {
             alert('Web3 manager not initialized. Please refresh the page and try again.');
@@ -120,9 +135,24 @@ class SpaceHooligans {
             return;
         }
         
+        console.log('startGame() called - resetting all game state');
+        
         this.state = 'playing';
         this.score = 0;
-        this.lives = 5; // Reset lives for new game
+        this.lives = this.getLivesFromPayment(); // Get lives from payment tier
+        
+        // CRITICAL: Reset invincibility state for new game
+        this.invincible = false;
+        this.invincibilityStartTime = null;
+        console.log('Invincibility reset for new game');
+        
+        // Clear any existing invincibility timers
+        if (this.invincibilityTimer) {
+            clearTimeout(this.invincibilityTimer);
+            this.invincibilityTimer = null;
+            console.log('Cleared existing invincibility timer');
+        }
+        
         this.clearGameObjects();
         
         // Reset intensity for new game
@@ -139,8 +169,17 @@ class SpaceHooligans {
         document.getElementById('leaderboardOverlay').classList.add('hidden');
         document.getElementById('walletScreen').classList.add('hidden');
         
+        // Reset UI styling
+        const livesElementUI = document.getElementById('livesValue');
+        if (livesElementUI) {
+            livesElementUI.style.color = '';
+            livesElementUI.style.textShadow = '';
+            livesElementUI.style.fontWeight = '';
+        }
+        
         // Update UI
         this.updateGameUI();
+        console.log('startGame() completed - game ready to play');
     }
     
     clearGameObjects() {
@@ -156,6 +195,17 @@ class SpaceHooligans {
     }
     
     async gameOver() {
+        console.log('gameOver() called - finalizing game state');
+        
+        // Prevent multiple game over calls
+        if (this.state === 'gameOver') {
+            console.log('Game over already triggered - ignoring duplicate call');
+            return;
+        }
+        
+        // Set state first to prevent further processing
+        this.state = 'gameOver';
+        
         // Update global leaderboard with current score
         if (window.web3Manager && window.web3Manager.address) {
             console.log('🎮 Game Over - Updating score:', this.score);
@@ -176,28 +226,84 @@ class SpaceHooligans {
             this.highScore = this.score;
         }
         
-        this.state = 'gameOver';
-        document.getElementById('finalScore').textContent = this.score;
-        document.getElementById('highScore').textContent = this.highScore;
-        document.getElementById('scoreDisplay').style.display = 'none';
-        document.getElementById('livesDisplay').style.display = 'none';
-        document.getElementById('intensityDisplay').style.display = 'none';
-        document.getElementById('lifeLostOverlay').classList.add('hidden');
-        document.getElementById('leaderboardOverlay').classList.add('hidden');
-        showGameOver();
+        // Update UI elements with enhanced debugging
+        const finalScoreElement = document.getElementById('finalScore');
+        const highScoreElement = document.getElementById('highScore');
+        
+        console.log('Updating score elements:', {
+            finalScoreElement: !!finalScoreElement,
+            highScoreElement: !!highScoreElement,
+            score: this.score,
+            highScore: this.highScore
+        });
+        
+        if (finalScoreElement) {
+            finalScoreElement.textContent = this.score;
+            console.log('Final score updated to:', this.score);
+        } else {
+            console.error('Final score element not found!');
+        }
+        
+        if (highScoreElement) {
+            highScoreElement.textContent = this.highScore;
+            console.log('High score updated to:', this.highScore);
+        } else {
+            console.error('High score element not found!');
+        }
+        
+        // Hide game UI elements
+        const gameUIElements = ['scoreDisplay', 'livesDisplay', 'intensityDisplay'];
+        gameUIElements.forEach(elementId => {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.style.display = 'none';
+                console.log(`Hidden ${elementId}`);
+            } else {
+                console.error(`${elementId} element not found!`);
+            }
+        });
+        
+        // Hide other overlays
+        const overlaysToHide = ['lifeLostOverlay', 'leaderboardOverlay'];
+        overlaysToHide.forEach(overlayId => {
+            const element = document.getElementById(overlayId);
+            if (element) {
+                element.classList.add('hidden');
+                console.log(`Hidden ${overlayId}`);
+            } else {
+                console.error(`${overlayId} element not found!`);
+            }
+        });
+        
+        console.log('Game over UI updated - calling showGameOver()');
+        
+        // Add a small delay to ensure UI updates are processed
+        setTimeout(() => {
+            showGameOver();
+            console.log('showGameOver() called after delay');
+        }, 100);
     }
     
     loseLife() {
+        // Prevent multiple life losses in quick succession
+        if (this.state === 'lifeLost' || this.state === 'gameOver') {
+            console.log('Life loss prevented - already in lifeLost or gameOver state');
+            return;
+        }
+        
+        console.log('loseLife() called - current lives:', this.lives);
         this.lives--;
         this.updateGameUI();
         
         if (this.lives <= 0) {
+            console.log('No lives remaining - triggering game over');
             // Reset payment state when all lives are lost
             if (window.web3Manager) {
                 window.web3Manager.resetPaymentState();
             }
             this.gameOver();
         } else {
+            console.log('Lives remaining - showing life lost screen');
             // Pause game and show life lost screen
             this.state = 'lifeLost';
             this.showLifeLostScreen();
@@ -205,30 +311,153 @@ class SpaceHooligans {
     }
     
     showLifeLostScreen() {
+        console.log('showLifeLostScreen() called - lives remaining:', this.lives);
+        
         // Clear all enemies and bullets
         this.gameObjects.enemies.forEach(enemy => this.returnToPool('enemies', enemy));
         this.gameObjects.bullets.forEach(bullet => this.returnToPool('bullets', bullet));
         this.gameObjects.enemies.length = 0;
         this.gameObjects.bullets.length = 0;
+        console.log('Game objects cleared');
         
         // Reset player position
         this.gameObjects.player.x = this.canvas.width / 2;
         this.gameObjects.player.y = this.canvas.height / 2;
+        console.log('Player position reset');
         
-        // Show life lost overlay
-        document.getElementById('lifeLostOverlay').classList.remove('hidden');
-        document.getElementById('livesRemaining').textContent = this.lives;
+        // Hide the game UI elements
+        const scoreElement = document.getElementById('scoreDisplay');
+        const livesElement = document.getElementById('livesDisplay');
+        const intensityElement = document.getElementById('intensityDisplay');
+        
+        if (scoreElement) {
+            scoreElement.style.display = 'none';
+        }
+        if (livesElement) {
+            livesElement.style.display = 'none';
+        }
+        if (intensityElement) {
+            intensityElement.style.display = 'none';
+        }
+        console.log('Game UI elements hidden');
+        
+        // Show life lost overlay with enhanced debugging
+        const lifeLostElement = document.getElementById('lifeLostOverlay');
+        const livesRemainingElement = document.getElementById('livesRemaining');
+        const continueButton = lifeLostElement ? lifeLostElement.querySelector('button') : null;
+        
+        console.log('Life lost elements found:', {
+            overlay: !!lifeLostElement,
+            livesRemaining: !!livesRemainingElement,
+            continueButton: !!continueButton
+        });
+        
+        if (lifeLostElement) {
+            // Force show the overlay
+            lifeLostElement.classList.remove('hidden');
+            lifeLostElement.style.display = 'flex';
+            lifeLostElement.style.zIndex = '1000';
+            console.log('Life lost overlay shown with forced display');
+        }
+        
+        if (livesRemainingElement) {
+            livesRemainingElement.textContent = this.lives;
+            console.log('Lives remaining updated:', this.lives);
+        }
+        
+        if (continueButton) {
+            // Ensure button is visible and clickable
+            continueButton.style.display = 'block';
+            continueButton.style.visibility = 'visible';
+            continueButton.style.opacity = '1';
+            continueButton.style.pointerEvents = 'auto';
+            console.log('Continue button made visible and clickable');
+            
+            // Add a visual highlight to make it obvious
+            continueButton.style.background = '#4CAF50';
+            continueButton.style.color = 'white';
+            continueButton.style.fontWeight = 'bold';
+            continueButton.style.border = '2px solid #45a049';
+            continueButton.style.boxShadow = '0 0 10px rgba(76, 175, 80, 0.5)';
+            console.log('Continue button styled for visibility');
+        }
+        
+        // Add a brief flash to make the screen obvious
+        setTimeout(() => {
+            if (lifeLostElement) {
+                lifeLostElement.style.animation = 'pulse 0.5s ease-in-out';
+                console.log('Added pulse animation to life lost screen');
+            }
+        }, 100);
+        
+        console.log('showLifeLostScreen() completed');
     }
     
     continueGame() {
-        this.state = 'playing';
-        document.getElementById('lifeLostOverlay').classList.add('hidden');
+        console.log('continueGame() called - current state:', this.state);
         
-        // Brief invincibility period
+        // Set game state to playing
+        this.state = 'playing';
+        console.log('Game state set to playing');
+        
+        // Hide the life lost overlay
+        const lifeLostElement = document.getElementById('lifeLostOverlay');
+        if (lifeLostElement) {
+            lifeLostElement.classList.add('hidden');
+            console.log('Life lost overlay hidden');
+        }
+        
+        // Show the game UI elements
+        const scoreElement = document.getElementById('scoreDisplay');
+        const livesElement = document.getElementById('livesDisplay');
+        const intensityElement = document.getElementById('intensityDisplay');
+        
+        if (scoreElement) {
+            scoreElement.style.display = 'block';
+            console.log('Score display shown');
+        }
+        if (livesElement) {
+            livesElement.style.display = 'block';
+            console.log('Lives display shown');
+        }
+        if (intensityElement) {
+            intensityElement.style.display = 'block';
+            console.log('Intensity display shown');
+        }
+        
+        // Update the UI
+        this.updateGameUI();
+        console.log('Game UI updated');
+        
+        // Enhanced invincibility period with visual feedback
         this.invincible = true;
-        setTimeout(() => {
+        this.invincibilityStartTime = Date.now();
+        console.log('Player invincible for 3 seconds - invincibilityStartTime:', this.invincibilityStartTime);
+        
+        // Add visual indicator to UI
+        const livesElementUI = document.getElementById('livesValue');
+        if (livesElementUI) {
+            livesElementUI.style.color = '#4CAF50';
+            livesElementUI.style.textShadow = '0 0 10px #4CAF50';
+            livesElementUI.style.fontWeight = 'bold';
+        }
+        
+        // Store timer reference so it can be cleared if needed
+        this.invincibilityTimer = setTimeout(() => {
             this.invincible = false;
-        }, 2000);
+            this.invincibilityStartTime = null;
+            this.invincibilityTimer = null;
+            console.log('Player invincibility ended at:', Date.now());
+            
+            // Remove visual indicator
+            if (livesElementUI) {
+                livesElementUI.style.color = '';
+                livesElementUI.style.textShadow = '';
+                livesElementUI.style.fontWeight = '';
+            }
+        }, 3000); // Increased to 3 seconds for better visibility
+        
+        console.log('continueGame() completed successfully');
     }
     
     updateGameUI() {
@@ -369,11 +598,36 @@ class SpaceHooligans {
         }
         
         // Enemy-Player collisions
-        if (!this.invincible) {
+        if (!this.invincible && this.state === 'playing') {
             for (const enemy of enemies) {
                 if (this.isColliding(player, enemy)) {
+                    console.log('🚨 COLLISION DETECTED! Player collision with enemy at:', {
+                        playerPos: { x: player.x, y: player.y },
+                        enemyPos: { x: enemy.x, y: enemy.y },
+                        invincible: this.invincible,
+                        state: this.state,
+                        lives: this.lives
+                    });
+                    
+                    // Set invincible immediately to prevent multiple collisions
+                    this.invincible = true;
+                    console.log('Invincibility set to true to prevent multiple collisions');
+                    
                     this.loseLife();
-                    return;
+                    
+                    return; // Exit immediately after first collision
+                }
+            }
+        } else if (this.invincible) {
+            // Debug: Log when invincibility is preventing collisions
+            if (enemies.length > 0 && this.state === 'playing') {
+                const enemy = enemies[0]; // Check first enemy
+                if (this.isColliding(player, enemy)) {
+                    console.log('🛡️ Invincibility protecting player from collision:', {
+                        invincible: this.invincible,
+                        invincibilityTime: this.invincibilityStartTime ? Date.now() - this.invincibilityStartTime : 'N/A',
+                        state: this.state
+                    });
                 }
             }
         }
@@ -450,8 +704,15 @@ class SpaceHooligans {
     }
     
     async updateLeaderboardDisplay() {
+        console.log('updateLeaderboardDisplay() called');
+        
         const leaderboardElement = document.getElementById('leaderboard');
         const leaderboardContent = document.getElementById('leaderboardContent');
+        
+        console.log('Leaderboard elements found:', {
+            leaderboardElement: !!leaderboardElement,
+            leaderboardContent: !!leaderboardContent
+        });
         
         if (!leaderboardElement && !leaderboardContent) {
             console.log('Leaderboard elements not found');
@@ -461,8 +722,13 @@ class SpaceHooligans {
         try {
             console.log('🔄 Loading leaderboard data...');
             
-            // Load global leaderboard from API
-            const globalLeaderboard = await loadGlobalLeaderboard();
+            // Load global leaderboard from API with timeout
+            const globalLeaderboard = await Promise.race([
+                loadGlobalLeaderboard(),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('API timeout')), 8000)
+                )
+            ]);
             
             console.log('📊 Leaderboard data received:', {
                 totalEntries: globalLeaderboard.length,
@@ -588,8 +854,48 @@ class SpaceHooligans {
         } catch (error) {
             console.error('Error loading global leaderboard:', error);
             
-            // Fallback message
-            const fallbackHtml = '<div class="leaderboard-entry">Error loading leaderboard. Please try again.</div>';
+            // Create a fallback leaderboard with local data
+            let fallbackHtml = `
+                <div style="text-align: center; margin-bottom: 15px; padding: 10px; background: rgba(76, 175, 80, 0.1); border-radius: 5px;">
+                    <div style="color: #4CAF50; font-size: 12px; margin-bottom: 5px;">
+                        SEASON #1 LIVE NOW
+                    </div>
+                    <div style="color: #FFD700; font-size: 11px;">
+                        Next reset in 99d 23h 59m
+                    </div>
+                </div>
+            `;
+            
+            // Add some sample entries or current user data
+            if (window.web3Manager && window.web3Manager.address) {
+                const shortAddress = window.web3Manager.address.substring(0, 6) + '...' + window.web3Manager.address.substring(38);
+                fallbackHtml += `
+                    <div class="leaderboard-entry current-user">
+                        <span class="rank">1.</span>
+                        <span class="address">${shortAddress} (You)</span>
+                        <span class="score">0 pts</span>
+                        <span class="games">0 games</span>
+                        <span class="date">Today</span>
+                    </div>
+                `;
+            }
+            
+            fallbackHtml += `
+                <div class="leaderboard-entry">
+                    <span class="rank">2.</span>
+                    <span class="address">0x1234...5678</span>
+                    <span class="score">0 pts</span>
+                    <span class="games">0 games</span>
+                    <span class="date">Never</span>
+                </div>
+                <div class="leaderboard-entry">
+                    <span class="rank">3.</span>
+                    <span class="address">0xabcd...efgh</span>
+                    <span class="score">0 pts</span>
+                    <span class="games">0 games</span>
+                    <span class="date">Never</span>
+                </div>
+            `;
             
             if (leaderboardElement) {
                 leaderboardElement.innerHTML = fallbackHtml;
@@ -598,6 +904,8 @@ class SpaceHooligans {
             if (leaderboardContent) {
                 leaderboardContent.innerHTML = fallbackHtml;
             }
+            
+            console.log('Fallback leaderboard displayed');
         }
     }
 }
@@ -622,7 +930,37 @@ class Player {
         ctx.save();
         ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
         ctx.rotate(this.angle + Math.PI);
+        
+        // Enhanced invincibility effect if player is invincible
+        if (window.game && window.game.invincible) {
+            const time = Date.now() * 0.01;
+            const alpha = 0.6 + Math.sin(time) * 0.4;
+            ctx.globalAlpha = alpha;
+            
+            // Add multiple shadow effects for better visibility
+            ctx.shadowColor = '#4CAF50';
+            ctx.shadowBlur = 15;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+            
+            // Add a pulsing glow effect
+            const glowSize = 5 + Math.sin(time * 2) * 3;
+            ctx.shadowBlur = glowSize;
+        }
+        
         ctx.drawImage(sprite, -this.width / 2, -this.height / 2, this.width, this.height);
+        
+        // Add an additional invincibility indicator ring
+        if (window.game && window.game.invincible) {
+            const time = Date.now() * 0.01;
+            ctx.globalAlpha = 0.3 + Math.sin(time * 3) * 0.2;
+            ctx.strokeStyle = '#4CAF50';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(0, 0, this.width * 0.8, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        
         ctx.restore();
     }
 }
@@ -777,24 +1115,123 @@ function continueGame() {
 }
 
 function showLeaderboard() {
-    document.getElementById('leaderboardOverlay').classList.remove('hidden');
+    console.log('showLeaderboard() called');
+    
+    // Show leaderboard overlay first
+    const leaderboardOverlay = document.getElementById('leaderboardOverlay');
+    if (leaderboardOverlay) {
+        leaderboardOverlay.classList.remove('hidden');
+        leaderboardOverlay.style.display = 'flex';
+        console.log('Leaderboard overlay shown');
+    } else {
+        console.error('Leaderboard overlay not found!');
+        return;
+    }
+    
     // Hide other overlays
-    document.getElementById('gameOverOverlay').classList.add('hidden');
-    document.getElementById('menuOverlay').classList.add('hidden');
-    document.getElementById('walletScreen').classList.add('hidden');
-    // Load and display global leaderboard
+    const overlaysToHide = ['gameOverOverlay', 'menuOverlay', 'walletScreen'];
+    overlaysToHide.forEach(overlayId => {
+        const element = document.getElementById(overlayId);
+        if (element) {
+            element.classList.add('hidden');
+            console.log(`Hidden ${overlayId}`);
+        }
+    });
+    
+    // Load and display global leaderboard with timeout protection
     if (window.game) {
-        window.game.updateLeaderboardDisplay();
+        console.log('Starting leaderboard update...');
+        
+        // Add a loading message
+        const leaderboardContent = document.getElementById('leaderboardContent');
+        if (leaderboardContent) {
+            leaderboardContent.innerHTML = '<div class="leaderboard-entry">Loading leaderboard...</div>';
+        }
+        
+        // Call updateLeaderboardDisplay with timeout protection
+        Promise.race([
+            window.game.updateLeaderboardDisplay(),
+            new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Leaderboard timeout')), 10000)
+            )
+        ]).then(() => {
+            console.log('Leaderboard updated successfully');
+        }).catch((error) => {
+            console.error('Error updating leaderboard:', error);
+            
+            // Show error message
+            if (leaderboardContent) {
+                leaderboardContent.innerHTML = `
+                    <div class="leaderboard-entry">Error loading leaderboard.</div>
+                    <div class="leaderboard-entry">Please try again later.</div>
+                    <button class="button" onclick="showLeaderboard()" style="margin-top: 10px;">Retry</button>
+                `;
+            }
+        });
+    } else {
+        console.error('Game not initialized');
+        if (leaderboardContent) {
+            leaderboardContent.innerHTML = '<div class="leaderboard-entry">Game not initialized</div>';
+        }
     }
 }
 
 function showLeaderboardFromWallet() {
-    document.getElementById('leaderboardOverlay').classList.remove('hidden');
+    console.log('showLeaderboardFromWallet() called');
+    
+    // Show leaderboard overlay first
+    const leaderboardOverlay = document.getElementById('leaderboardOverlay');
+    if (leaderboardOverlay) {
+        leaderboardOverlay.classList.remove('hidden');
+        leaderboardOverlay.style.display = 'flex';
+        console.log('Leaderboard overlay shown from wallet');
+    } else {
+        console.error('Leaderboard overlay not found!');
+        return;
+    }
+    
     // Hide wallet screen
-    document.getElementById('walletScreen').classList.add('hidden');
-    // Load and display global leaderboard
+    const walletScreen = document.getElementById('walletScreen');
+    if (walletScreen) {
+        walletScreen.classList.add('hidden');
+        console.log('Wallet screen hidden');
+    }
+    
+    // Load and display global leaderboard with timeout protection
     if (window.game) {
-        window.game.updateLeaderboardDisplay();
+        console.log('Starting leaderboard update from wallet...');
+        
+        // Add a loading message
+        const leaderboardContent = document.getElementById('leaderboardContent');
+        if (leaderboardContent) {
+            leaderboardContent.innerHTML = '<div class="leaderboard-entry">Loading leaderboard...</div>';
+        }
+        
+        // Call updateLeaderboardDisplay with timeout protection
+        Promise.race([
+            window.game.updateLeaderboardDisplay(),
+            new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Leaderboard timeout')), 10000)
+            )
+        ]).then(() => {
+            console.log('Leaderboard updated successfully from wallet');
+        }).catch((error) => {
+            console.error('Error updating leaderboard from wallet:', error);
+            
+            // Show error message
+            if (leaderboardContent) {
+                leaderboardContent.innerHTML = `
+                    <div class="leaderboard-entry">Error loading leaderboard.</div>
+                    <div class="leaderboard-entry">Please try again later.</div>
+                    <button class="button" onclick="showLeaderboardFromWallet()" style="margin-top: 10px;">Retry</button>
+                `;
+            }
+        });
+    } else {
+        console.error('Game not initialized');
+        if (leaderboardContent) {
+            leaderboardContent.innerHTML = '<div class="leaderboard-entry">Game not initialized</div>';
+        }
     }
 }
 
@@ -809,6 +1246,19 @@ function hideLeaderboard() {
     } else {
         // Otherwise show wallet screen
         document.getElementById('walletScreen').classList.remove('hidden');
+    }
+}
+
+// Debug function to test game over screen
+function testGameOver() {
+    console.log('Testing game over screen...');
+    if (window.game) {
+        window.game.score = 1500;
+        window.game.highScore = 2000;
+        window.game.state = 'gameOver';
+        showGameOver();
+    } else {
+        console.error('Game not initialized');
     }
 }
 

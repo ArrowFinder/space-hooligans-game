@@ -92,6 +92,48 @@
             text-align: justify;
         }
 
+        .wallet-section {
+            background: rgba(76, 175, 80, 0.1);
+            border: 2px solid #4CAF50;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 40px;
+            text-align: center;
+            box-shadow: 0 0 30px rgba(76, 175, 80, 0.3);
+        }
+
+        .wallet-section h2 {
+            font-size: 20px;
+            color: #4CAF50;
+            margin-bottom: 15px;
+            text-shadow: 0 0 10px #4CAF50;
+        }
+
+        .wallet-address {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid #4CAF50;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            color: #4CAF50;
+            word-break: break-all;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .wallet-address:hover {
+            background: rgba(76, 175, 80, 0.2);
+            box-shadow: 0 0 15px rgba(76, 175, 80, 0.5);
+        }
+
+        .wallet-label {
+            font-size: 12px;
+            color: #b8b8b8;
+            margin-bottom: 10px;
+        }
+
         .back-button {
             display: inline-block;
             background: #4CAF50;
@@ -147,6 +189,15 @@
         <div class="header">
             <h1>ABOUT SPACE HOOLIGANS</h1>
             <p>A Web3 arcade game where skill meets blockchain, and every shot counts in the cosmic battle for glory.</p>
+        </div>
+
+        <div class="wallet-section">
+            <h2>GAME WALLET ADDRESS</h2>
+            <div class="wallet-label">All game payments are sent to this address:</div>
+            <div class="wallet-address" onclick="copyWalletAddress()" title="Click to copy">
+                0x452161Fd28713878D84838c5Cc5b41Faf46d710A
+            </div>
+            <div style="font-size: 10px; color: #888; margin-top: 10px;">Click the address to copy to clipboard</div>
         </div>
 
         <div class="sections">
@@ -215,5 +266,32 @@
             <p>Space Hooligans - Where Web3 Meets Arcade Gaming</p>
         </div>
     </div>
+
+    <script>
+        function copyWalletAddress() {
+            const address = '0x452161Fd28713878D84838c5Cc5b41Faf46d710A';
+            navigator.clipboard.writeText(address).then(function() {
+                // Show a brief success message
+                const walletElement = document.querySelector('.wallet-address');
+                const originalText = walletElement.textContent;
+                walletElement.textContent = 'Address copied!';
+                walletElement.style.color = '#FFD700';
+                
+                setTimeout(() => {
+                    walletElement.textContent = originalText;
+                    walletElement.style.color = '#4CAF50';
+                }, 2000);
+            }).catch(function(err) {
+                console.error('Failed to copy address: ', err);
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = address;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+            });
+        }
+    </script>
 </body>
 </html> 
