@@ -286,6 +286,37 @@
             font-size: 12px;
         }
         
+        .transaction-counter {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #FF6B35;
+            border-radius: 10px;
+            padding: 10px;
+            font-size: 11px;
+            text-align: center;
+            min-width: 150px;
+        }
+        
+        .transaction-counter h4 {
+            color: #FF6B35;
+            margin: 0 0 5px 0;
+            font-size: 12px;
+        }
+        
+        .transaction-counter .games-played {
+            color: #4CAF50;
+            font-weight: bold;
+            margin: 2px 0;
+        }
+        
+        .transaction-counter .karrat-spent {
+            color: #FFD700;
+            font-weight: bold;
+            margin: 2px 0;
+        }
+        
 
     </style>
 </head>
@@ -308,6 +339,13 @@
         </div>
         
         <div class="leaderboard" id="leaderboard" style="display: none;"></div>
+        
+        <!-- Transaction Counter -->
+        <div class="transaction-counter" id="transactionCounter">
+            <h4>Game Stats</h4>
+            <div class="games-played">Games: <span id="totalGamesPlayed">0</span></div>
+            <div class="karrat-spent">$KARRAT: <span id="totalKarratSpent">0</span></div>
+        </div>
 
         <!-- Wallet Connection Screen -->
         <div class="overlay" id="walletScreen">

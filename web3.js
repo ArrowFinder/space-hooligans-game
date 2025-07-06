@@ -96,6 +96,10 @@ class Web3Manager {
         this.connectionRetries = 0;
         this.maxRetries = 3;
         
+        // Transaction counter tracking
+        this.totalGamesPlayed = 0;
+        this.totalKarratSpent = 0;
+        
         this.initialize();
     }
     
@@ -120,6 +124,9 @@ class Web3Manager {
             console.error('Error checking saved payment:', error);
             localStorage.removeItem('spaceHooligans_payment');
         }
+        
+        // Load transaction statistics
+        this.loadTransactionStats();
     }
     
     async connectMetaMask() {
@@ -347,6 +354,9 @@ class Web3Manager {
                 // Verify payment was actually received by checking game wallet balance
                 await this.verifyPaymentReceived(receipt.transactionHash);
                 
+                // Increment transaction counter
+                this.incrementTransactionCounter();
+                
                 this.hasPaid = true;
                 
                 // Save payment state to localStorage
@@ -375,6 +385,53 @@ class Web3Manager {
             this.handlePaymentError(error);
         } finally {
             this.paymentInProgress = false;
+        }
+    }
+    
+    // Transaction Counter Management
+    updateTransactionCounter() {
+        const gamesElement = document.getElementById('totalGamesPlayed');
+        const karratElement = document.getElementById('totalKarratSpent');
+        
+        if (gamesElement) {
+            gamesElement.textContent = this.totalGamesPlayed.toLocaleString();
+        }
+        
+        if (karratElement) {
+            karratElement.textContent = this.totalKarratSpent.toLocaleString();
+        }
+        
+        console.log('Transaction counter updated:', {
+            games: this.totalGamesPlayed,
+            karrat: this.totalKarratSpent
+        });
+    }
+    
+    incrementTransactionCounter() {
+        this.totalGamesPlayed += 1;
+        this.totalKarratSpent += 1;
+        this.updateTransactionCounter();
+        
+        // Save to localStorage for persistence
+        localStorage.setItem('spaceHooligans_stats', JSON.stringify({
+            gamesPlayed: this.totalGamesPlayed,
+            karratSpent: this.totalKarratSpent,
+            timestamp: Date.now()
+        }));
+    }
+    
+    loadTransactionStats() {
+        try {
+            const savedStats = localStorage.getItem('spaceHooligans_stats');
+            if (savedStats) {
+                const stats = JSON.parse(savedStats);
+                this.totalGamesPlayed = stats.gamesPlayed || 0;
+                this.totalKarratSpent = stats.karratSpent || 0;
+                this.updateTransactionCounter();
+                console.log('Loaded transaction stats:', stats);
+            }
+        } catch (error) {
+            console.error('Error loading transaction stats:', error);
         }
     }
     
