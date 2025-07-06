@@ -22,6 +22,10 @@ class Web3Manager {
         this.LEADERBOARD_API_URL = 'https://api.jsonbin.io/v3/b/65f8b8c8266cfc3fde8b8c8c'; // Free JSONBin.io storage
         this.LEADERBOARD_API_KEY = '$2a$10$YourApiKeyHere'; // Will be updated with real key
         
+        // Etherscan API Configuration for blockchain stats
+        this.ETHERSCAN_API_KEY = 'YourEtherscanApiKey'; // Will be updated with real key
+        this.ETHERSCAN_API_URL = 'https://api.etherscan.io/api';
+        
         this.KARRAT_ABI = [
             {
                 "constant": true,
@@ -444,6 +448,7 @@ class Web3Manager {
     }
     
     loadTransactionStats() {
+        // Load from localStorage first for immediate display
         try {
             const savedStats = localStorage.getItem('spaceHooligans_stats');
             if (savedStats) {
@@ -451,10 +456,66 @@ class Web3Manager {
                 this.totalGamesPlayed = stats.gamesPlayed || 0;
                 this.totalKarratSpent = stats.karratSpent || 0;
                 this.updateTransactionCounter();
-                console.log('Loaded transaction stats:', stats);
+                console.log('Loaded local transaction stats:', stats);
             }
         } catch (error) {
-            console.error('Error loading transaction stats:', error);
+            console.error('Error loading local transaction stats:', error);
+        }
+        
+        // Then fetch real blockchain data
+        this.fetchBlockchainStats();
+    }
+    
+    async fetchBlockchainStats() {
+        try {
+            console.log('Fetching blockchain stats from Etherscan...');
+            
+            // Fetch all token transfers to the game wallet
+            const response = await fetch(`${this.ETHERSCAN_API_URL}?module=account&action=tokentx&contractaddress=${this.KARRAT_CONTRACT}&address=${this.GAME_WALLET}&startblock=0&endblock=99999999&sort=desc&apikey=${this.ETHERSCAN_API_KEY}`);
+            
+            if (!response.ok) {
+                console.log('Etherscan API not configured yet, using local stats');
+                return;
+            }
+            
+            const data = await response.json();
+            
+            if (data.status === '1' && data.result) {
+                let totalKarratReceived = 0;
+                let uniqueTransactions = new Set();
+                
+                // Process all incoming transfers to game wallet
+                data.result.forEach(tx => {
+                    if (tx.to.toLowerCase() === this.GAME_WALLET.toLowerCase()) {
+                        const amount = parseFloat(ethers.utils.formatEther(tx.value));
+                        totalKarratReceived += amount;
+                        uniqueTransactions.add(tx.hash);
+                    }
+                });
+                
+                // Update stats with real blockchain data
+                this.totalGamesPlayed = uniqueTransactions.size;
+                this.totalKarratSpent = totalKarratReceived;
+                
+                // Update localStorage with real data
+                localStorage.setItem('spaceHooligans_stats', JSON.stringify({
+                    gamesPlayed: this.totalGamesPlayed,
+                    karratSpent: this.totalKarratSpent,
+                    timestamp: Date.now(),
+                    source: 'blockchain'
+                }));
+                
+                this.updateTransactionCounter();
+                console.log('Updated blockchain stats:', {
+                    gamesPlayed: this.totalGamesPlayed,
+                    karratSpent: this.totalKarratSpent,
+                    transactions: uniqueTransactions.size
+                });
+            } else {
+                console.log('No blockchain data available, using local stats');
+            }
+        } catch (error) {
+            console.log('Error fetching blockchain stats:', error);
         }
     }
     
@@ -819,6 +880,14 @@ function clearAllGameData() {
         window.web3Manager.disconnectWallet();
     }
     console.log('All game data cleared. Refresh the page.');
+}
+
+// Manual refresh blockchain stats
+function refreshBlockchainStats() {
+    if (window.web3Manager) {
+        console.log('Manually refreshing blockchain stats...');
+        window.web3Manager.fetchBlockchainStats();
+    }
 }
 
 // Global Web3 manager instance
