@@ -134,48 +134,70 @@ class SpaceHooligans {
         }
     }
     
-    updateLeaderboardDisplay() {
+    async updateLeaderboardDisplay() {
         const leaderboardElement = document.getElementById('leaderboard');
         const leaderboardContent = document.getElementById('leaderboardContent');
         
-        let html = '';
-        
-        // Get current user's address for highlighting
-        const currentUserAddress = window.web3Manager ? window.web3Manager.address : null;
-        
-        // Show all players (not just top 10)
-        this.leaderboard.forEach((entry, index) => {
-            const shortAddress = entry.address.substring(0, 6) + '...' + entry.address.substring(38);
-            const date = new Date(entry.timestamp).toLocaleDateString();
-            const rank = index + 1;
-            const gamesPlayed = entry.gamesPlayed || 1;
+        try {
+            // Load global leaderboard from API
+            const globalLeaderboard = await loadGlobalLeaderboard();
             
-            // Highlight current user's entry
-            const isCurrentUser = currentUserAddress && entry.address.toLowerCase() === currentUserAddress.toLowerCase();
-            const highlightClass = isCurrentUser ? 'current-user' : '';
+            let html = '';
             
-            html += `
-                <div class="leaderboard-entry ${highlightClass}">
-                    <span class="rank">${rank}.</span>
-                    <span class="address">${shortAddress}${isCurrentUser ? ' (You)' : ''}</span>
-                    <span class="score">${entry.score.toLocaleString()}</span>
-                    <span class="games">${gamesPlayed} games</span>
-                    <span class="date">${date}</span>
-                </div>
-            `;
-        });
-        
-        // Add message if no entries
-        if (this.leaderboard.length === 0) {
-            html = '<div class="leaderboard-entry">No scores yet. Be the first to play!</div>';
-        }
-        
-        if (leaderboardElement) {
-            leaderboardElement.innerHTML = html;
-        }
-        
-        if (leaderboardContent) {
-            leaderboardContent.innerHTML = html;
+            // Get current user's address for highlighting
+            const currentUserAddress = window.web3Manager ? window.web3Manager.address : null;
+            
+            // Sort by total score (highest first)
+            globalLeaderboard.sort((a, b) => b.totalScore - a.totalScore);
+            
+            // Show all players
+            globalLeaderboard.forEach((entry, index) => {
+                const shortAddress = entry.address.substring(0, 6) + '...' + entry.address.substring(38);
+                const lastGameDate = entry.lastGameDate ? new Date(entry.lastGameDate).toLocaleDateString() : 'Never';
+                const rank = index + 1;
+                const gamesPlayed = entry.gamesPlayed || 0;
+                
+                // Highlight current user's entry
+                const isCurrentUser = currentUserAddress && entry.address.toLowerCase() === currentUserAddress.toLowerCase();
+                const highlightClass = isCurrentUser ? 'current-user' : '';
+                
+                html += `
+                    <div class="leaderboard-entry ${highlightClass}">
+                        <span class="rank">${rank}.</span>
+                        <span class="address">${shortAddress}${isCurrentUser ? ' (You)' : ''}</span>
+                        <span class="score">${entry.totalScore.toLocaleString()}</span>
+                        <span class="games">${gamesPlayed} games</span>
+                        <span class="date">${lastGameDate}</span>
+                    </div>
+                `;
+            });
+            
+            // Add message if no entries
+            if (globalLeaderboard.length === 0) {
+                html = '<div class="leaderboard-entry">No players yet. Be the first to pay and play!</div>';
+            }
+            
+            if (leaderboardElement) {
+                leaderboardElement.innerHTML = html;
+            }
+            
+            if (leaderboardContent) {
+                leaderboardContent.innerHTML = html;
+            }
+            
+        } catch (error) {
+            console.error('Error loading global leaderboard:', error);
+            
+            // Fallback message
+            const fallbackHtml = '<div class="leaderboard-entry">Error loading leaderboard. Please try again.</div>';
+            
+            if (leaderboardElement) {
+                leaderboardElement.innerHTML = fallbackHtml;
+            }
+            
+            if (leaderboardContent) {
+                leaderboardContent.innerHTML = fallbackHtml;
+            }
         }
     }
     
@@ -314,9 +336,9 @@ class SpaceHooligans {
     }
     
     async gameOver() {
-        // Update leaderboard with current score
+        // Update global leaderboard with current score
         if (window.web3Manager && window.web3Manager.address) {
-            await this.updateLeaderboard(this.score, window.web3Manager.address);
+            await updateGlobalScore(this.score);
         }
         
         // Check if this is a new high score
@@ -756,11 +778,11 @@ function continueGame() {
 }
 
 function showLeaderboard() {
-    document.getElementById('gameOverOverlay').classList.add('hidden');
-    document.getElementById('walletOverlay').classList.add('hidden');
-    document.getElementById('menuOverlay').classList.add('hidden');
-    document.getElementById('lifeLostOverlay').classList.add('hidden');
     document.getElementById('leaderboardOverlay').classList.remove('hidden');
+    // Load and display global leaderboard
+    if (window.game) {
+        window.game.updateLeaderboardDisplay();
+    }
 }
 
 function hideLeaderboard() {

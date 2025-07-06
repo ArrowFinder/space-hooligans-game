@@ -17,6 +17,11 @@ class Web3Manager {
         
         // Leaderboard contract (will be deployed)
         this.LEADERBOARD_CONTRACT = '0x0000000000000000000000000000000000000000'; // Placeholder - will be updated after deployment
+        
+        // Global Leaderboard API Configuration
+        this.LEADERBOARD_API_URL = 'https://api.jsonbin.io/v3/b/65f8b8c8266cfc3fde8b8c8c'; // Free JSONBin.io storage
+        this.LEADERBOARD_API_KEY = '$2a$10$YourApiKeyHere'; // Will be updated with real key
+        
         this.KARRAT_ABI = [
             {
                 "constant": true,
@@ -306,6 +311,9 @@ class Web3Manager {
                     txHash: receipt.transactionHash
                 }));
                 
+                // Add player to global leaderboard when they pay
+                await this.addPlayerToGlobalLeaderboard();
+                
                 this.showSuccess('Payment successful! You have 5 more lives!');
                 
                 // Update balance
@@ -322,6 +330,99 @@ class Web3Manager {
             this.handlePaymentError(error);
         } finally {
             this.paymentInProgress = false;
+        }
+    }
+    
+    // Global Leaderboard API Methods
+    async addPlayerToGlobalLeaderboard() {
+        if (!this.address) return;
+        
+        try {
+            const leaderboard = await this.getGlobalLeaderboard();
+            
+            // Check if player already exists
+            const existingPlayer = leaderboard.find(player => player.address.toLowerCase() === this.address.toLowerCase());
+            
+            if (!existingPlayer) {
+                // Add new player
+                leaderboard.push({
+                    address: this.address,
+                    totalScore: 0,
+                    gamesPlayed: 0,
+                    lastGameDate: null,
+                    firstGameDate: new Date().toISOString()
+                });
+                
+                await this.updateGlobalLeaderboard(leaderboard);
+                console.log('Player added to global leaderboard');
+            }
+        } catch (error) {
+            console.error('Error adding player to global leaderboard:', error);
+        }
+    }
+    
+    async updatePlayerScore(score) {
+        if (!this.address) return;
+        
+        try {
+            const leaderboard = await this.getGlobalLeaderboard();
+            
+            // Find and update player
+            const playerIndex = leaderboard.findIndex(player => player.address.toLowerCase() === this.address.toLowerCase());
+            
+            if (playerIndex !== -1) {
+                leaderboard[playerIndex].totalScore += score;
+                leaderboard[playerIndex].gamesPlayed += 1;
+                leaderboard[playerIndex].lastGameDate = new Date().toISOString();
+                
+                await this.updateGlobalLeaderboard(leaderboard);
+                console.log('Player score updated in global leaderboard');
+            }
+        } catch (error) {
+            console.error('Error updating player score:', error);
+        }
+    }
+    
+    async getGlobalLeaderboard() {
+        try {
+            const response = await fetch(this.LEADERBOARD_API_URL, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Master-Key': this.LEADERBOARD_API_KEY
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch leaderboard');
+            }
+            
+            const data = await response.json();
+            return data.record.leaderboard || [];
+        } catch (error) {
+            console.error('Error fetching global leaderboard:', error);
+            return [];
+        }
+    }
+    
+    async updateGlobalLeaderboard(leaderboard) {
+        try {
+            const response = await fetch(this.LEADERBOARD_API_URL, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Master-Key': this.LEADERBOARD_API_KEY
+                },
+                body: JSON.stringify({ leaderboard })
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to update leaderboard');
+            }
+            
+            console.log('Global leaderboard updated successfully');
+        } catch (error) {
+            console.error('Error updating global leaderboard:', error);
         }
     }
     
@@ -516,6 +617,20 @@ function showMenu() {
 
 function showGameOver() {
     document.getElementById('gameOverOverlay').classList.remove('hidden');
+}
+
+// Global functions for leaderboard
+async function loadGlobalLeaderboard() {
+    if (window.web3Manager) {
+        return await window.web3Manager.getGlobalLeaderboard();
+    }
+    return [];
+}
+
+async function updateGlobalScore(score) {
+    if (window.web3Manager) {
+        await window.web3Manager.updatePlayerScore(score);
+    }
 }
 
 // Global Web3 manager instance
