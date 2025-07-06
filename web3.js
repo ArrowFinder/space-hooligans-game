@@ -254,6 +254,11 @@ class Web3Manager {
             console.log('Updating UI to connected state...');
             this.updateUIState('connected');
             console.log('UI state updated to connected');
+            
+            // Show the payment screen after successful connection
+            console.log('Showing payment screen...');
+            showMenu();
+            console.log('Payment screen shown');
         } catch (error) {
             console.error('Error setting up wallet info:', error);
         }
