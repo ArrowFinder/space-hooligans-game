@@ -43,3 +43,5 @@ ARCHITECTURE:
 
 DISTRIBUTION:
 Share this folder with friends to let them play the game. Ensure they have the required tokens and MetaMask setup before playing.
+
+# Trigger redeploy
