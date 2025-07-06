@@ -23,7 +23,7 @@ class Web3Manager {
         this.LEADERBOARD_API_KEY = '$2a$10$YourApiKeyHere'; // Will be updated with real key
         
         // Etherscan API Configuration for blockchain stats
-        this.ETHERSCAN_API_KEY = 'YourEtherscanApiKey'; // Will be updated with real key
+        this.ETHERSCAN_API_KEY = 'MR8TZ35Z9UH32JM6YPX88W9B784NXXTM3C';
         this.ETHERSCAN_API_URL = 'https://api.etherscan.io/api';
         
         this.KARRAT_ABI = [
