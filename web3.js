@@ -169,11 +169,16 @@ class Web3Manager {
             this.provider = new ethers.providers.Web3Provider(ethereum);
             this.signer = this.provider.getSigner();
             
+            console.log('MetaMask connection successful, setting up wallet info...');
             await this.setupWalletInfo();
             this.showSuccess('MetaMask connected successfully!');
             
-            // Update UI to connected state
-            this.updateUIState('connected');
+            console.log('Connection complete. Current state:', {
+                address: this.address,
+                balance: this.karratBalance,
+                provider: !!this.provider,
+                signer: !!this.signer
+            });
             
         } catch (error) {
             console.error('MetaMask connection error:', error);
@@ -228,15 +233,20 @@ class Web3Manager {
     }
     
     async setupWalletInfo() {
-        if (!this.provider || !this.address) return;
+        if (!this.provider || !this.address) {
+            console.log('setupWalletInfo: Missing provider or address');
+            return;
+        }
         
         try {
             console.log('Setting up wallet info for address:', this.address);
             await this.getKarratBalance();
             console.log('Balance fetched:', this.karratBalance);
             
-            // Force UI update after balance is fetched
+            // Update UI to connected state
+            console.log('Updating UI to connected state...');
             this.updateUIState('connected');
+            console.log('UI state updated to connected');
         } catch (error) {
             console.error('Error setting up wallet info:', error);
         }
@@ -458,42 +468,58 @@ class Web3Manager {
     }
     
     updateUIState(state) {
+        console.log('updateUIState called with state:', state);
+        
         const connectBtn = document.getElementById('connectWalletBtn');
         const payBtn = document.getElementById('payToPlayBtn');
         const balanceDisplay = document.getElementById('karratBalance');
         const addressDisplay = document.getElementById('walletAddress');
+        
+        console.log('UI elements found:', {
+            connectBtn: !!connectBtn,
+            payBtn: !!payBtn,
+            balanceDisplay: !!balanceDisplay,
+            addressDisplay: !!addressDisplay
+        });
         
         if (connectBtn) {
             switch (state) {
                 case 'connecting':
                     connectBtn.textContent = 'Connecting...';
                     connectBtn.disabled = true;
+                    console.log('Connect button set to: Connecting...');
                     break;
                 case 'connected':
                     connectBtn.textContent = 'Connected';
                     connectBtn.disabled = true;
+                    console.log('Connect button set to: Connected');
                     break;
                 case 'paying':
                     connectBtn.textContent = 'Processing Payment...';
                     connectBtn.disabled = true;
+                    console.log('Connect button set to: Processing Payment...');
                     break;
                 default:
                     connectBtn.textContent = 'Connect MetaMask';
                     connectBtn.disabled = false;
+                    console.log('Connect button set to: Connect MetaMask');
             }
         }
         
         if (payBtn) {
             payBtn.disabled = state === 'paying' || state === 'connecting';
+            console.log('Pay button disabled:', payBtn.disabled);
         }
         
         if (balanceDisplay && this.karratBalance !== undefined) {
             balanceDisplay.textContent = `${this.karratBalance.toFixed(2)} $KARRAT`;
+            console.log('Balance display updated to:', balanceDisplay.textContent);
         }
         
         if (addressDisplay && this.address) {
             const shortAddress = `${this.address.slice(0, 6)}...${this.address.slice(-4)}`;
             addressDisplay.textContent = shortAddress;
+            console.log('Address display updated to:', addressDisplay.textContent);
         }
     }
     
