@@ -104,6 +104,12 @@ class Web3Manager {
     }
     
     async initialize() {
+        // Only run initialization if we don't have a connected wallet
+        if (this.address) {
+            console.log('Wallet already connected, skipping initialization');
+            return;
+        }
+        
         try {
             const savedPayment = localStorage.getItem('spaceHooligans_payment');
             if (savedPayment) {
