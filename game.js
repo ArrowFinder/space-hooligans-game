@@ -1,3 +1,4 @@
+// FORCE SYNC: This comment is to force git to recognize a change and allow a commit/push.
 // Space Hooligans - Web3 Arcade Game
 // Optimized for maximum performance
 
