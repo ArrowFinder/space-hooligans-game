@@ -16,7 +16,7 @@ class SpaceHooligans {
         this.baseEnemySpawnRate = 0.002; // Reduced by 90%
         this.enemySpawnRate = this.baseEnemySpawnRate;
         this.intensityMultiplier = 1.0;
-        this.maxIntensity = 3.0; // Maximum intensity multiplier
+        this.maxIntensity = 1.5; // Reduced from 3.0 (50% reduction for smoother scaling)
         
         // Object pools for performance
         this.objectPools = {
@@ -147,8 +147,8 @@ class SpaceHooligans {
             // Get current user's address for highlighting
             const currentUserAddress = window.web3Manager ? window.web3Manager.address : null;
             
-            // Sort by total $KARRAT spent (highest first)
-            globalLeaderboard.sort((a, b) => b.totalKarratSpent - a.totalKarratSpent);
+            // Sort by total score (highest first)
+            globalLeaderboard.sort((a, b) => b.totalScore - a.totalScore);
             
             // Show all players
             globalLeaderboard.forEach((entry, index) => {
@@ -165,7 +165,7 @@ class SpaceHooligans {
                     <div class="leaderboard-entry ${highlightClass}">
                         <span class="rank">${rank}.</span>
                         <span class="address">${shortAddress}${isCurrentUser ? ' (You)' : ''}</span>
-                        <span class="score">${entry.totalKarratSpent.toFixed(1)} $KARRAT</span>
+                        <span class="score">${entry.totalScore.toLocaleString()} pts</span>
                         <span class="games">${gamesPlayed} games</span>
                         <span class="date">${lastGameDate}</span>
                     </div>
@@ -496,13 +496,13 @@ class SpaceHooligans {
     }
     
     updateIntensity() {
-        // Scale intensity based on score milestones
+        // Scale intensity based on score milestones (reduced scaling)
         const scoreMilestones = [1000, 2500, 5000, 10000, 20000, 50000];
         let newIntensity = 1.0;
         
         for (let i = 0; i < scoreMilestones.length; i++) {
             if (this.score >= scoreMilestones[i]) {
-                newIntensity = 1.0 + (i + 1) * 0.3; // Increase by 0.3 for each milestone
+                newIntensity = 1.0 + (i + 1) * 0.1; // Reduced from 0.3 to 0.1 (67% reduction)
             }
         }
         

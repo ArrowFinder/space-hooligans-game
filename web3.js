@@ -144,6 +144,9 @@ class Web3Manager {
         
         // Load transaction statistics
         this.loadTransactionStats();
+        
+        // Don't show any screens during initialization - let the connection flow handle UI
+        console.log('Initialization complete - waiting for wallet connection');
     }
     
     async connectMetaMask() {
@@ -281,6 +284,15 @@ class Web3Manager {
             console.log('Showing payment screen...');
             showWalletScreen();
             console.log('Payment screen shown');
+            
+            // Force a small delay to ensure UI updates are processed
+            setTimeout(() => {
+                console.log('Final check - wallet screen should be visible');
+                const walletScreen = document.getElementById('walletScreen');
+                const menuOverlay = document.getElementById('menuOverlay');
+                console.log('Wallet screen hidden:', walletScreen?.classList.contains('hidden'));
+                console.log('Menu overlay hidden:', menuOverlay?.classList.contains('hidden'));
+            }, 100);
         } catch (error) {
             console.error('Error setting up wallet info:', error);
         }
@@ -564,8 +576,11 @@ class Web3Manager {
         try {
             console.log('Fetching blockchain leaderboard from Etherscan...');
             
-            // Fetch all token transfers to the game wallet
-            const response = await fetch(`${this.ETHERSCAN_API_URL}?module=account&action=tokentx&contractaddress=${this.KARRAT_CONTRACT}&address=${this.GAME_WALLET}&startblock=0&endblock=99999999&sort=desc&apikey=${this.ETHERSCAN_API_KEY}`);
+            // Filter for transactions from 7/5/2025 onwards
+            const startDate = new Date('2025-07-05T00:00:00Z').getTime() / 1000; // Convert to Unix timestamp
+            
+            // Fetch all token transfers to the game wallet from 7/5/2025 onwards
+            const response = await fetch(`${this.ETHERSCAN_API_URL}?module=account&action=tokentx&contractaddress=${this.KARRAT_CONTRACT}&address=${this.GAME_WALLET}&startblock=0&endblock=99999999&starttime=${startDate}&sort=desc&apikey=${this.ETHERSCAN_API_KEY}`);
             
             if (!response.ok) {
                 console.log('Etherscan API not available, returning empty leaderboard');
@@ -581,39 +596,44 @@ class Web3Manager {
                 data.result.forEach(tx => {
                     if (tx.to.toLowerCase() === this.GAME_WALLET.toLowerCase()) {
                         const fromAddress = tx.from.toLowerCase();
-                        const amount = parseFloat(ethers.utils.formatEther(tx.value));
                         const timestamp = parseInt(tx.timeStamp) * 1000; // Convert to milliseconds
                         
                         if (!walletStats.has(fromAddress)) {
                             walletStats.set(fromAddress, {
                                 address: fromAddress,
-                                totalKarratSpent: 0,
+                                totalScore: 0,
                                 gamesPlayed: 0,
                                 lastGameDate: 0,
-                                firstGameDate: timestamp
+                                firstGameDate: timestamp,
+                                highestScore: 0
                             });
                         }
                         
                         const stats = walletStats.get(fromAddress);
-                        stats.totalKarratSpent += amount;
                         stats.gamesPlayed += 1;
                         stats.lastGameDate = Math.max(stats.lastGameDate, timestamp);
+                        
+                        // For now, we'll use games played as a proxy for score
+                        // In a real implementation, you'd track actual game scores
+                        stats.totalScore += 1000; // Placeholder score per game
+                        stats.highestScore = Math.max(stats.highestScore, 1000);
                     }
                 });
                 
-                // Convert to array and sort by total $KARRAT spent
+                // Convert to array and sort by total score (highest first)
                 const leaderboard = Array.from(walletStats.values())
-                    .sort((a, b) => b.totalKarratSpent - a.totalKarratSpent)
+                    .sort((a, b) => b.totalScore - a.totalScore)
                     .map((entry, index) => ({
                         rank: index + 1,
                         address: entry.address,
-                        totalKarratSpent: entry.totalKarratSpent,
+                        totalScore: entry.totalScore,
+                        highestScore: entry.highestScore,
                         gamesPlayed: entry.gamesPlayed,
                         lastGameDate: entry.lastGameDate,
                         firstGameDate: entry.firstGameDate
                     }));
                 
-                console.log('Blockchain leaderboard loaded:', leaderboard.length, 'players');
+                console.log('Blockchain leaderboard loaded:', leaderboard.length, 'players from 7/5/2025 onwards');
                 return leaderboard;
             } else {
                 console.log('No blockchain data available, returning empty leaderboard');
@@ -712,6 +732,18 @@ class Web3Manager {
             const shortAddress = `${this.address.slice(0, 6)}...${this.address.slice(-4)}`;
             addressDisplay.textContent = shortAddress;
             console.log('Address display updated to:', addressDisplay.textContent);
+        }
+        
+        // Show/hide wallet info based on connection state
+        const walletInfo = document.getElementById('walletInfo');
+        if (walletInfo) {
+            if (state === 'connected') {
+                walletInfo.style.display = 'block';
+                console.log('Wallet info shown');
+            } else {
+                walletInfo.style.display = 'none';
+                console.log('Wallet info hidden');
+            }
         }
     }
     
@@ -832,8 +864,26 @@ function disconnectWallet() {
 }
 
 function showWalletScreen() {
-    document.getElementById('menuOverlay').classList.add('hidden');
-    document.getElementById('walletScreen').classList.remove('hidden');
+    console.log('showWalletScreen() called');
+    const menuOverlay = document.getElementById('menuOverlay');
+    const walletScreen = document.getElementById('walletScreen');
+    
+    console.log('Before changes:');
+    console.log('menuOverlay hidden:', menuOverlay?.classList.contains('hidden'));
+    console.log('walletScreen hidden:', walletScreen?.classList.contains('hidden'));
+    
+    if (menuOverlay) menuOverlay.classList.add('hidden');
+    if (walletScreen) walletScreen.classList.remove('hidden');
+    
+    console.log('After changes:');
+    console.log('menuOverlay hidden:', menuOverlay?.classList.contains('hidden'));
+    console.log('walletScreen hidden:', walletScreen?.classList.contains('hidden'));
+    
+    // Force the wallet screen to be visible
+    if (walletScreen) {
+        walletScreen.style.display = 'flex';
+        console.log('Forced wallet screen to display: flex');
+    }
 }
 
 function showMenu() {
@@ -884,6 +934,14 @@ let web3Manager;
 
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded - checking initial UI state');
+    const walletScreen = document.getElementById('walletScreen');
+    const menuOverlay = document.getElementById('menuOverlay');
+    console.log('Initial state:');
+    console.log('walletScreen display:', walletScreen?.style.display);
+    console.log('walletScreen hidden class:', walletScreen?.classList.contains('hidden'));
+    console.log('menuOverlay hidden class:', menuOverlay?.classList.contains('hidden'));
+    
     web3Manager = new Web3Manager();
     window.web3Manager = web3Manager;
 }); 
