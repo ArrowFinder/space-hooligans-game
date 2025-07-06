@@ -112,11 +112,18 @@ class Web3Manager {
                 const sessionDuration = 24 * 60 * 60 * 1000; // 24 hours
                 
                 if (now - paymentData.timestamp < sessionDuration) {
-                    this.hasPaid = true;
-                    this.address = paymentData.address;
-                    showMenu();
-                    return;
+                    // Only restore payment state if we have a connected wallet with the same address
+                    if (this.address && this.address.toLowerCase() === paymentData.address.toLowerCase()) {
+                        this.hasPaid = true;
+                        console.log('Restored payment state for address:', this.address);
+                        showMenu();
+                        return;
+                    } else {
+                        console.log('Saved payment found but for different address, clearing...');
+                        localStorage.removeItem('spaceHooligans_payment');
+                    }
                 } else {
+                    console.log('Saved payment expired, clearing...');
                     localStorage.removeItem('spaceHooligans_payment');
                 }
             }
@@ -529,13 +536,14 @@ class Web3Manager {
             });
             
             if (!response.ok) {
-                throw new Error('Failed to fetch leaderboard');
+                console.log('Leaderboard API not configured yet, returning empty leaderboard');
+                return [];
             }
             
             const data = await response.json();
             return data.record.leaderboard || [];
         } catch (error) {
-            console.error('Error fetching global leaderboard:', error);
+            console.log('Leaderboard API not available yet, returning empty leaderboard');
             return [];
         }
     }
@@ -562,6 +570,7 @@ class Web3Manager {
     }
     
     disconnectWallet() {
+        console.log('Disconnecting wallet...');
         this.provider = null;
         this.signer = null;
         this.address = null;
@@ -576,6 +585,11 @@ class Web3Manager {
         
         this.updateUIState('disconnected');
         this.hideMessages();
+        
+        // Show wallet connection screen
+        console.log('Showing wallet connection screen...');
+        showWalletScreen();
+        console.log('Wallet connection screen shown');
     }
     
     resetPaymentState() {
